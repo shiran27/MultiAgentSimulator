@@ -294,12 +294,12 @@ out = runTrial(struct('Layout', "ReportLayout.mat", 'AgentStarts', "layout", ...
 
 ## Paper results
 
-`PaperResults.mlx` (repository root) regenerates every result of the simulator paper: Table I from the code, Tables II–IV and Figs. 10–13 from headless runs, and the GUI figures (Figs. 2, 3, 5–9 and 12) from `MainUI`. Open it and click **Run All**, or run it without the Live Editor to get a PDF report of everything:
+`PaperResults.mlx` (repository root) regenerates every result of the simulator paper: the validation tables against the JS simulator (ED-RHC and ED-ORHC on its eight presets), the four case studies (policies × agent types, path planners, the energy trade-off of ED-ORHC-SO over β, and Battery-Aware ED-RHC on the charging-dock office), their tables, plots and the numbers quoted in the text (`macros.tex`), the GUI figures (overview, scenario library, planner routes), and the getting-started figures (it runs `Examples/EventDetection/eventDetectionExample.m`). Open it and click **Run All**, or run it without the Live Editor to get a PDF report of everything:
 ```
 matlab -batch "addpath(genpath(pwd)); exportPaperResults"
 matlab -batch "addpath(genpath(pwd)); exportPaperResults(Quick=true)"
 ```
-The full run (500 s runs, 4 seeds) takes about ten minutes and writes to `results/paper/`; `Quick=true` (60 s runs, 2 seeds, about 80 s) writes to `results/paper_quick/`. The output folder holds `PaperResults.pdf`, `runs.csv` (every run), LaTeX tables and `macros.tex` for the paper to `\input`, and `figures/` (PNG; the plots also as PDF).
+The full run takes about an hour and writes to `results/paper/`; when the paper's folder sits next to this repository (`../Paper_PerMonSimulator`), the tables, macros and figures are also copied into its `generated/` folder, which the paper includes. `Quick=true` (60 s runs, at most two seeds, one validation problem, a few minutes) writes to `results/paper_quick/` only.
 
 The experiments are defined in `Experiments/paper/paperDefaults.m` (the reference scenario) and `Experiments/paper/paperConditions.m` (what each experiment varies). The live script is binary, so it is built from a plain-text source: edit `Experiments/paper/paperResultsSource.m` and run `buildPaperResults`.
 
