@@ -1,4 +1,4 @@
-classdef RandomWalkPolicy < handle
+classdef RandomWalkPolicy < Policy
     % Random walk with clearing dwells. Event-driven like ED-RHC, but an agent acts only at two
     % of its own events:
     %   arrival:    it dwells for U[1 - dwellSpread, 1 + dwellSpread] times the time to empty

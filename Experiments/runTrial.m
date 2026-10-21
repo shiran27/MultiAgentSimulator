@@ -9,6 +9,10 @@ function out = runTrial(params)
 % 'Agent_profile', "SO", 'Agent_maxAccel', 10, 'Agent_kp', 16, 'Agent_batteryWh', 50); any other
 % Agent_<property> is set on every agent (or its state or controller). A warning says when the
 % agents do not suit the policy (ScenarioModel.checkAgentFit).
+% Optional: TargetType (a registered target type; default: the layout's, else "Uncertainty
+% Target") and Metrics (registered metric names; the first is the objective whose time course
+% finalJ, steadyJ and slopeJ describe; default: J(t)). out.metricValues holds every metric's
+% final value (fields named by metric class).
 
 p = withDefaults(params);
 root = fileparts(fileparts(mfilename('fullpath')));
@@ -20,10 +24,12 @@ end
 layoutFile = char(p.Layout);                 % file name in Configurations/, or any full path
 if ~isfile(layoutFile), layoutFile = fullfile(root, 'Configurations', layoutFile); end
 tmp = load(layoutFile, 's');
+if isfield(p, 'TargetType'), tmp.s.targetType = string(p.TargetType); end
 reg = ComponentRegistry();
 plannerFactory = reg.factoryFor('pathplanner', char(p.Planner));
 model = ScenarioModel(plannerFactory(), reg.factoryFor('agenttype', char(p.AgentType)));
 model.importLayout(tmp.s);
+if isfield(p, 'Metrics') && ~isempty(p.Metrics), model.setMetrics(p.Metrics); end
 model.detectionRadius = p.DetectionRadius;
 stored = arrayfun(@(a) a.initialTargetIdx, model.agents);   % start targets saved in the layout
 model.agents = [];   % trial parameters place the agents ("layout" reuses the stored starts)
@@ -133,6 +139,7 @@ slopeJ = c(1);
 
 out = struct('finalJ', finalJ, 'steadyJ', steadyJ, 'slopeJ', slopeJ, ...
     'peakR', peakR, 'coLocationTime', coLocationTime, 'policy', pol);
+out.metricValues = model.metricValues(clock.currentTime);
 % Energy-aware RHC metrics (paper eqs. 3 and 73): Je = sum of int |u|^2 dt (NaN when an agent
 % used a "constant" profile), peak speed and acceleration; Js = finalJ; JT = energyWeight * Je + Js.
 out.Je = NaN; out.JT = NaN; out.vmax = NaN; out.umax = NaN;

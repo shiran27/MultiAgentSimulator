@@ -15,6 +15,8 @@ classdef MainUI < handle
         plannerDropdown
         policyDropdown
         agentTypeDropdown
+        targetTypeDropdown  % target type of every target (ScenarioModel.setTargetType)
+        objectiveDropdown   % metric plotted in the objective window (ScenarioModel.metrics{1})
         registry
         model
         renderer
@@ -61,9 +63,10 @@ classdef MainUI < handle
             obj.fig.WindowButtonMotionFcn = @(~,~)obj.safeOnMouseMove();
             obj.controller.setMode("idle");
             
-            % Initialize default selected policy and uncertainty states
+            % Initialize default selected policy, uncertainty and objective states
             obj.onPolicyChanged(obj.policyDropdown.Value);
             obj.onUncertaintyModeChanged(obj.uncertaintyDropdown.Value);
+            obj.onObjectiveChanged(obj.objectiveDropdown.Value);
             
             obj.renderer.renderAll(obj.model);
             obj.setTime(0, obj.clock.endTime);
@@ -89,7 +92,8 @@ classdef MainUI < handle
         function loadLayout(obj, file)
             tmp = load(file, 's');
             obj.model.importLayout(tmp.s);
-            % The layout may carry its uncertainty mode and agents; show them in the controls
+            % The layout may carry its target type, uncertainty mode and agents; show them
+            obj.targetTypeDropdown.Value = char(obj.model.targetType);
             obj.uncertaintyDropdown.Value = obj.model.uncertaintyMode;
             if ~isempty(obj.model.agents)
                 a = obj.model.agents(1);
@@ -154,8 +158,8 @@ classdef MainUI < handle
             main = uigridlayout(obj.fig, [1 2], 'ColumnWidth', {280, '1x'});
             left = uigridlayout(main, [2 1], 'RowHeight', {'fit', 'fit'}, ...
                 'Padding', [0 0 0 0], 'Scrollable', 'on');
-            p  = uigridlayout(uipanel(left, 'Title','Tools'), [17 2], ...
-                'RowHeight', [repmat({'fit'}, 1, 16) {36}], 'ColumnWidth', {'1x', '1x'}, ...
+            p  = uigridlayout(uipanel(left, 'Title','Tools'), [21 2], ...
+                'RowHeight', [repmat({'fit'}, 1, 20) {36}], 'ColumnWidth', {'1x', '1x'}, ...
                 'RowSpacing', 5, 'Padding', [8 6 8 6]);
             tp = uigridlayout(uipanel(left, 'Title','Time Control & Analysis'), [7 4], ...
                 'RowHeight', repmat({'fit'}, 1, 7), 'ColumnWidth', {'fit', '1x', 'fit', '1x'}, ...
@@ -224,16 +228,26 @@ classdef MainUI < handle
                 'Value', 'Random Walk', ...
                 'ValueChangedFcn', @(s,~)obj.onPolicyChanged(s.Value)), 13, [1 2]);
 
-            % Uncertainty mode: constant A_i by default (as in the paper); spikes are opt-in
-            place(uilabel(p,'Text','Uncertainty:', 'FontWeight','bold'), 14, [1 2]);
+            % Target type (its dynamics); the uncertainty mode of the default Uncertainty Target:
+            % constant A_i by default (as in the paper), spikes are opt-in
+            place(uilabel(p,'Text','Targets:', 'FontWeight','bold'), 14, [1 2]);
+            obj.targetTypeDropdown = place(uidropdown(p, ...
+                'Items', obj.registry.keysFor('targettype'), 'Value', 'Uncertainty Target', ...
+                'ValueChangedFcn', @(s,~)obj.onTargetTypeChanged(s.Value)), 15, [1 2]);
             obj.uncertaintyDropdown = place(uidropdown(p, ...
                 'Items', ScenarioModel.UncertaintyModes, ...
                 'Value', 'Static Uniform', ...
-                'ValueChangedFcn', @(s,~)obj.onUncertaintyModeChanged(s.Value)), 15, [1 2]);
+                'ValueChangedFcn', @(s,~)obj.onUncertaintyModeChanged(s.Value)), 16, [1 2]);
 
-            obj.modeLabel = place(uilabel(p,'Text','Mode: idle', 'FontWeight','bold'), 16, [1 2]);
+            % Objective: the metric plotted over time in the objective window
+            place(uilabel(p,'Text','Objective:', 'FontWeight','bold'), 17, [1 2]);
+            obj.objectiveDropdown = place(uidropdown(p, ...
+                'Items', obj.registry.keysFor('metric'), 'Value', 'Average Uncertainty J(t)', ...
+                'ValueChangedFcn', @(s,~)obj.onObjectiveChanged(s.Value)), 18, [1 2]);
+
+            obj.modeLabel = place(uilabel(p,'Text','Mode: idle', 'FontWeight','bold'), 20, [1 2]);
             obj.statusLabel = place(uilabel(p,'Text','', 'WordWrap','on', ...
-                'VerticalAlignment','top'), 17, [1 2]);
+                'VerticalAlignment','top'), 21, [1 2]);
 
             obj.ax.PickableParts = 'all';
             obj.ax.HitTest = 'on';
@@ -381,6 +395,24 @@ classdef MainUI < handle
             obj.setStatus(sprintf('Agent type: %s (applies to new agents)', name));
         end
 
+        function onTargetTypeChanged(obj, name)
+            % Rebuilds the scenario with targets of the new type (positions, rates, edges and
+            % agents are kept)
+            obj.model.setTargetType(name);
+            obj.renderer.clearAxes();
+            obj.renderer.renderAll(obj.model);
+            obj.onResetSimulation();
+            obj.setStatus(sprintf('Target type: %s', name));
+        end
+
+        function onObjectiveChanged(obj, name)
+            % The metric plotted over time (the model's first metric)
+            obj.model.setMetrics(string(name));
+            m = obj.model.metrics{1};
+            obj.objectiveWin.setObjective(m.label, m.plotMax);
+            obj.setStatus(sprintf('Objective: %s', name));
+        end
+
         function onAgentAccelChanged(obj, value)
             obj.model.agentSpec.maxAccel = value;
             obj.accelField.Value = value;
@@ -402,7 +434,8 @@ classdef MainUI < handle
             % Lock component choices while a run is in progress
             state = 'on';
             if running, state = 'off'; end
-            dds = {obj.plannerDropdown, obj.policyDropdown, obj.agentTypeDropdown, obj.uncertaintyDropdown, obj.profileDropdown};
+            dds = {obj.plannerDropdown, obj.policyDropdown, obj.agentTypeDropdown, obj.uncertaintyDropdown, ...
+                obj.profileDropdown, obj.targetTypeDropdown, obj.objectiveDropdown};
             for k = 1:numel(dds)
                 if ~isempty(dds{k}) && isvalid(dds{k}), dds{k}.Enable = state; end
             end

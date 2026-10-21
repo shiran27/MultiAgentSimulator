@@ -13,6 +13,10 @@ classdef ScenarioModel < handle
         uncertaintyMode = 'Static Uniform'      % constant A_i, as in the paper; see UncertaintyModes
         pathPlanner
         agentFactory
+        targetFactory           % @(idx, pos) target: the registered type targetType
+        targetType = "Uncertainty Target"   % target type (ComponentRegistry name) of the targets
+        metrics = {}            % Metric objects updated every step; the first is the objective
+                                % plotted in the GUI (default: AverageUncertainty, J(t))
         bounds = [0 100 0 100]  % [xMin xMax yMin yMax]
         detectionRadius = 1.2   % an agent at rest (not in transit) this close to a target services it
         agentSpec = AgentSpec() % spec (settings) of the agents added next; the type is agentFactory
@@ -49,6 +53,8 @@ classdef ScenarioModel < handle
             end
             obj.pathPlanner  = pathPlanner;
             obj.agentFactory = agentFactory;
+            obj.targetFactory = @(idx, pos) Target(idx, pos);
+            obj.metrics = {AverageUncertainty()};
 
             % One instance per registered policy, kept for the model's lifetime
             reg = ComponentRegistry();
@@ -78,6 +84,33 @@ classdef ScenarioModel < handle
             % The registered agent type of the agents added next
             obj.agentFactory = obj.registry.factoryFor('agenttype', char(name));
             obj.agentSpec.type = string(name);
+        end
+
+        function setTargetType(obj, name)
+            % The registered target type of every target: the scenario is rebuilt with targets
+            % of that type (same positions, rates, edges, walls and agents)
+            obj.targetFactory = obj.registry.factoryFor('targettype', char(name));
+            obj.targetType = string(name);
+            if ~isempty(obj.targets)
+                s = obj.exportLayout();
+                obj.importLayout(s);
+            end
+        end
+
+        function setMetrics(obj, names)
+            % The registered metrics to compute, the first one being the objective
+            names = string(names);
+            obj.metrics = arrayfun(@(n) feval(obj.registry.factoryFor('metric', char(n))), ...
+                names, 'UniformOutput', false);
+            for k = 1:numel(obj.metrics), obj.metrics{k}.reset(obj); end
+        end
+
+        function v = metricValues(obj, simTime)
+            % Current value of every metric (struct; field names from the metrics' class names)
+            v = struct();
+            for k = 1:numel(obj.metrics)
+                v.(class(obj.metrics{k})) = obj.metrics{k}.value(obj, simTime);
+            end
         end
 
         function msg = checkAgentFit(obj)
@@ -236,8 +269,10 @@ classdef ScenarioModel < handle
                 end
             end
 
-            % 3. COMPUTE RUNNING TIME-AVERAGED COST J
-            JNow = obj.cumUncertaintyIntegral / max(eps, simTime);
+            % 3. UPDATE THE METRICS; THE FIRST ONE (DEFAULT: J(t), THE RUNNING TIME-AVERAGED
+            % UNCERTAINTY) IS THE OBJECTIVE
+            for k = 1:numel(obj.metrics), obj.metrics{k}.update(obj, simTime, dtSim); end
+            JNow = obj.metrics{1}.value(obj, simTime);
         end
         function [e, ok, msg] = addEdgeByTargets(obj, t1Idx, t2Idx)
             e = Edge.empty; ok = false; msg = "";
@@ -269,6 +304,7 @@ classdef ScenarioModel < handle
             s.agentAccel = arrayfun(@(a) a.state.maxAccel, obj.agents);      % max acceleration per agent
             s.agentProfile = arrayfun(@(a) a.profile, obj.agents);           % speed profile per agent
             s.background = obj.background;                                    % background image file
+            s.targetType = obj.targetType;                                    % target type (registry name)
             s.uncertaintyMode = obj.uncertaintyMode;
             s.A = [obj.targets.A_uniformBase].';   % base growth rate A_i per target
             s.B = [obj.targets.B].';               % decay rate B_i per agent, per target
@@ -279,6 +315,10 @@ classdef ScenarioModel < handle
             % Fields missing from older files keep their defaults; A, B, R0 and agentSpeed may
             % also be scalars that apply to every target / agent
             obj.clearAll();
+            if isfield(s, 'targetType') && ismember(string(s.targetType), obj.registry.keysFor('targettype'))
+                obj.targetFactory = obj.registry.factoryFor('targettype', char(s.targetType));
+                obj.targetType = string(s.targetType);
+            end
             for k = 1:size(s.targets, 1)
                 t = obj.addTarget(s.targets(k,:));
                 t.setRates(layoutValue(s, 'A', k), layoutValue(s, 'B', k), layoutValue(s, 'R0', k));
@@ -306,7 +346,7 @@ classdef ScenarioModel < handle
         end
 
         function t = addTarget(obj, pos)
-            t = Target(numel(obj.targets) + 1, pos);
+            t = obj.targetFactory(numel(obj.targets) + 1, pos);
             obj.targets(end+1) = t;
         end
 
@@ -331,6 +371,7 @@ classdef ScenarioModel < handle
             obj.walls = []; obj.cumUncertaintyIntegral = 0; obj.hasLastSample = false;
             obj.lastLogTime = 0; obj.lastUncertainty = 0;
             obj.resetPolicyReservations();
+            for k = 1:numel(obj.metrics), obj.metrics{k}.reset(obj); end
         end
 
         function resetPolicyReservations(obj)
@@ -349,6 +390,7 @@ classdef ScenarioModel < handle
             for k = 1:numel(obj.agents), obj.agents(k).resetToInitial(); end
             for t = 1:numel(obj.targets), obj.targets(t).reset(); end
             obj.resetPolicyReservations();
+            for k = 1:numel(obj.metrics), obj.metrics{k}.reset(obj); end
         end
 
         function [idx, dist] = findNearestTarget(obj, pos)

@@ -1,4 +1,4 @@
-classdef EDRHCPolicy < handle
+classdef EDRHCPolicy < Policy
     % Event-driven receding horizon control (ED-RHC) for persistent monitoring on networks,
     % with the weighted RHCP3 objective of RHC-alpha: S. Welikala and C. G. Cassandras,
     % "Event-driven receding horizon control for distributed persistent monitoring in network

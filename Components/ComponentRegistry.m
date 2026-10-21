@@ -5,6 +5,8 @@ classdef ComponentRegistry < handle
         pathPlanners   % name -> @() planner
         policies       % name -> @() policy
         agentTypes     % name -> @(idx, pos, speed) agent
+        targetTypes    % name -> @(idx, pos) target
+        metrics        % name -> @() metric
         aliases        % older agent type names -> @(idx, pos, speed) agent; resolved by factoryFor
                        % but not listed by keysFor (so not offered in the GUI)
         assumptions    % policy name -> agent assumption, for policies that do not declare one
@@ -16,6 +18,7 @@ classdef ComponentRegistry < handle
             obj.pathPlanners = containers.Map('KeyType','char','ValueType','any');
             obj.pathPlanners('Dijkstra Corners') = @() DijkstraCornerPlanner();
             obj.pathPlanners('Energy Efficient') = @() EnergyEfficientPlanner();
+            obj.pathPlanners('Grid A*')          = @() GridAStarPlanner();
 
             obj.policies = containers.Map('KeyType','char','ValueType','any');
             obj.policies('Random Walk')       = @() RandomWalkPolicy();
@@ -27,6 +30,7 @@ classdef ComponentRegistry < handle
             obj.policies('ED-RHC')            = @() EDRHCPolicy();
             obj.policies('ED-ORHC-SO')        = @() EDRHCPolicy(Transit="SO");
             obj.policies('ED-ORHC-FO')        = @() EDRHCPolicy(Transit="FO");
+            obj.policies('Chase Events (example)') = @() ChaseEventsPolicy();
 
             % What each policy assumes of the agents' motion (a policy may also declare it as a
             % constant property agentAssumption; see assumptionOf)
@@ -40,6 +44,15 @@ classdef ComponentRegistry < handle
             obj.agentTypes = containers.Map('KeyType','char','ValueType','any');
             obj.agentTypes('Abstract Agent')   = @(idx, pos, sp) AbstractAgent(idx, pos, sp);
             obj.agentTypes('Physical Agent') = @(idx, pos, sp) PhysicalAgent(idx, pos, sp);
+            obj.agentTypes('Simple Agent (example)') = @(idx, pos, sp) SimpleAgent(idx, pos, sp);
+
+            obj.targetTypes = containers.Map('KeyType','char','ValueType','any');
+            obj.targetTypes('Uncertainty Target')     = @(idx, pos) Target(idx, pos);
+            obj.targetTypes('Event Target (example)') = @(idx, pos) EventTarget(idx, pos);
+
+            obj.metrics = containers.Map('KeyType','char','ValueType','any');
+            obj.metrics('Average Uncertainty J(t)') = @() AverageUncertainty();
+            obj.metrics('Missed Events (example)')  = @() MissedEvents();
 
             % Agent types before the consolidation of 2026-10-20, kept so older scripts and
             % layouts run unchanged (e.g. William's Joint RHC studies use 'Linear Agent')
@@ -91,6 +104,8 @@ classdef ComponentRegistry < handle
                 case 'pathplanner', m = obj.pathPlanners;
                 case 'policy',      m = obj.policies;
                 case 'agenttype',   m = obj.agentTypes;
+                case 'targettype',  m = obj.targetTypes;
+                case 'metric',      m = obj.metrics;
                 otherwise
                     error('ComponentRegistry:UnknownKind', 'Unknown kind: %s', kind);
             end

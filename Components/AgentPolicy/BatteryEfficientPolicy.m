@@ -1,4 +1,4 @@
-classdef BatteryEfficientPolicy < handle
+classdef BatteryEfficientPolicy < Policy
     properties
         criticalBatteryThreshold = 20.0 % Percentage
         dwellRange = [0.5 1.5]          % dwell at each target ~ U(dwellRange) seconds; [0 0] = no dwell

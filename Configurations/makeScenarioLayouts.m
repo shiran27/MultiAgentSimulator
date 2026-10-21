@@ -9,7 +9,7 @@ function makeScenarioLayouts()
 here = fileparts(mfilename('fullpath'));
 bgDir = fullfile(here, 'backgrounds');
 if ~isfolder(bgDir), mkdir(bgDir); end
-makers = {@cityPatrol, @officeFloor, @harborPatrol, @campus};
+makers = {@cityPatrol, @officeFloor, @harborPatrol, @campus, @museum};
 for k = 1:numel(makers)
     [name, s, drawFcn] = makers{k}();
     s.background = name + ".png";
@@ -303,6 +303,58 @@ function w = vWallGaps(x, y0, y1, gaps, half)
 % Vertical wall from y0 to y1 at x with door gaps centered at gaps
 h = hWallGaps(y0, y1, x, gaps, half);
 w = h(:, [2 1 4 3]);
+end
+
+%% ---------------------------------------------------------------------------------------------
+function [name, s, draw] = museum()
+% A small museum for the beginner's example (Examples/EventDetection): four galleries around a
+% plus-shaped hall, each open to the atrium at its inner corner. Every wall and target lies on
+% the GUI's 5-unit click grid, so the layout can be rebuilt by clicking on the image; its
+% targets are event targets (EventTarget). The outer walls are walls too: without them, the
+% shortest way around an inner wall that ends at the outer wall would pass outside.
+name = "Museum";
+inner = [40 10 40 30; 10 40 30 40; 40 90 40 70; 10 60 30 60
+         60 10 60 30; 70 40 90 40; 60 90 60 70; 70 60 90 60];
+outer = [10 10 45 10; 55 10 90 10; 90 10 90 90; 90 90 10 90; 10 90 10 10];   % entrance at x 45-55
+walls = [inner; outer];
+targets = [20 20; 20 80; 80 20; 80 80; 50 15; 15 50; 50 85; 85 50; 50 50];
+edges = [9 5; 9 6; 9 7; 9 8; 1 9; 2 9; 3 9; 4 9; 1 5; 2 6; 4 7; 3 8];
+s = layout(targets, edges, walls, [9 1 4], 4, ones(9, 1));   % slow indoor robots
+s.targetType = "Event Target (example)";
+draw = @drawMuseum;
+
+    function drawMuseum(ax)
+        outside = [0.85 0.88 0.82]; hall = [0.965 0.953 0.925]; wallC = [0.30 0.34 0.40];
+        tints = {[0.90 0.94 0.98], [0.92 0.96 0.89], [0.98 0.94 0.89], [0.95 0.93 0.97]};
+        fill(ax, [0 100 100 0], [0 0 100 100], outside, 'EdgeColor', 'none');
+        fill(ax, [10 90 90 10], [10 10 90 90], hall, 'EdgeColor', 'none');
+        rooms = [10 10 40 40; 10 60 40 90; 60 10 90 40; 60 60 90 90];
+        for k = 1:4
+            r = rooms(k, :);
+            fill(ax, r([1 3 3 1]), r([2 2 4 4]), tints{k}, 'EdgeColor', 'none');
+        end
+        rectangle(ax, 'Position', [43 43 14 14], 'Curvature', 1, 'FaceColor', [0.93 0.87 0.78], ...
+            'EdgeColor', [0.80 0.72 0.60], 'LineWidth', 1.5);                    % atrium rug
+        art = {[0.85 0.45 0.35], [0.35 0.55 0.80], [0.95 0.75 0.30], [0.45 0.65 0.45]};
+        for k = 1:4                                                        % paintings, pedestals
+            r = rooms(k, :); c = art{k};
+            xs = r(1) + [6 16]; ys = r(2) + [7 19];
+            if r(2) > 50, yw = r(4) - 1.6; else, yw = r(2) + 0.6; end
+            for x = xs, rectangle(ax, 'Position', [x yw 7 1], 'FaceColor', c, 'EdgeColor', c * 0.7); end
+            if r(1) > 50, xw = r(3) - 1.6; else, xw = r(1) + 0.6; end
+            for y = ys, rectangle(ax, 'Position', [xw y 1 7], 'FaceColor', c * 0.9, 'EdgeColor', c * 0.6); end
+            px = r(1) + 22 * (r(1) < 50) + 8 * (r(1) > 50);
+            py = r(2) + 8 * (r(2) < 50) + 22 * (r(2) > 50);
+            rectangle(ax, 'Position', [px - 1.5 py - 1.5 3 3], 'FaceColor', [0.97 0.97 0.97], ...
+                'EdgeColor', [0.6 0.6 0.6]);                                     % pedestal
+            rectangle(ax, 'Position', [px - 0.8 py - 0.8 1.6 1.6], 'Curvature', 1, 'FaceColor', c, 'EdgeColor', 'none');
+        end
+        fill(ax, [45 55 55 45], [5 5 10 10], [0.70 0.66 0.60], 'EdgeColor', 'none');   % entrance mat
+        for k = 1:size(walls, 1), plot(ax, walls(k, [1 3]), walls(k, [2 4]), 'Color', wallC, 'LineWidth', 5); end
+        label(ax, 25, 36, 'Gallery A', 0); label(ax, 25, 64, 'Gallery B', 0);
+        label(ax, 75, 36, 'Gallery C', 0); label(ax, 75, 64, 'Gallery D', 0);
+        label(ax, 50, 41, 'Atrium', 0); label(ax, 50, 3, 'Entrance', 0);
+    end
 end
 
 %% ---------------------------------------------------------------------------------------------

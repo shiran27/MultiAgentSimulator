@@ -2,11 +2,15 @@
 
 A MATLAB simulator for experimenting with multi-agent path planning, navigation policies, and agent behavior. Agents move between targets on a user-drawn graph, avoiding walls, while an objective function tracks how well the swarm covers the environment over time.
 
-The project is designed around three **modular areas** so new algorithms can be dropped in and compared side-by-side from the UI:
+The project is designed around five **modular areas** so new algorithms can be dropped in and compared side-by-side from the UI:
 
-- **Path Planner** — how a path between two targets is computed (e.g. shortest distance, energy-efficient turning).
-- **Agent Policy** — how an agent decides which target to go to next.
-- **Agent Type** — the agent class itself (its dynamics, state, energy model, rendering, etc.).
+- **Path Planner** — how a path between two targets is computed (Dijkstra Corners, Energy Efficient, Grid A*).
+- **Agent Policy** — how an agent decides which target to go to next (base class `Policy`).
+- **Agent Type** — the agent class itself (its dynamics, state, energy model, rendering, etc.; base class `Agent`).
+- **Target Type** — what a target's state is and how it evolves (base class `Target`).
+- **Metric** — how a run is scored; the first one is the objective plotted over time (base class `Metric`).
+
+New to the simulator? `Examples/EventDetection/` sets up a new monitoring problem from scratch (see [Getting started](#getting-started-a-new-monitoring-problem)).
 
 ## Examples
 
@@ -53,6 +57,7 @@ The **Scenario** dropdown (top of the Tools panel; `MainUI.loadScenario(name)` i
 | City patrol | `CityPatrol.mat` | Police patrol on a street grid: 16 intersections and 5 sites (police HQ, bank, school, mall, hospital); every edge runs along a road, so the 4 patrol cars stay on the roads; the nine blocks are obstacles |
 | Harbor patrol | `HarborPatrol.mat` | Coast with a port, piers and a breakwater, two islands; 12 buoys and berths, 3 boats |
 | Campus | `Campus.mat` | Zoomed-out building complex: six buildings and a pond (obstacles), quad, parking; 11 sites, 5 agents |
+| Museum (event detection example) | `Museum.mat` | The beginner's example: four galleries around a hall, event targets (`EventTarget`), 3 robots at speed 4; every wall and target on the GUI's click grid |
 | JS: ... | `Legacy/JS_*.mat` | The eight presets of the legacy JS simulator (RHC papers), scaled to the canvas |
 
 `Configurations/scenarioCatalog.m` lists them. `Configurations/makeScenarioLayouts.m` draws the maps (`Configurations/backgrounds/*.png`) and writes their layouts from the same geometry, so walls line up with the drawn walls, buildings, coasts and piers. It also restyles the lab floor plan (`LabLayout.png`) in the same palette as `backgrounds/LabFloor.png`. Edit it to change a scenario, or add a row to the catalog for a new layout file.
@@ -108,6 +113,11 @@ matlab -batch "addpath(genpath(pwd)); smokeTest"
 matlab -batch "addpath(genpath(pwd)); assertSuccess(runtests('guiTest'))"
 ```
 Screenshots of each stage are written to `results/gui/` (git-ignored).
+
+`tests/extensionTest.m` checks the extension points: switching target types, the metrics and `runTrial`'s `metricValues`, the event-detection example, and the Grid A* planner on every map (no wall crossings):
+```
+matlab -batch "addpath(genpath(pwd)); extensionTest"
+```
 
 ## Agent types
 
@@ -250,6 +260,29 @@ The full run (500 s runs, 4 seeds) takes about ten minutes and writes to `result
 
 The experiments are defined in `Experiments/paper/paperDefaults.m` (the reference scenario) and `Experiments/paper/paperConditions.m` (what each experiment varies). The live script is binary, so it is built from a plain-text source: edit `Experiments/paper/paperResultsSource.m` and run `buildPaperResults`.
 
+## Path planners
+
+Every edge's path is planned once, when the edge is added (and again when walls or the planner change). Agents follow it; the policies use its length.
+
+| Planner | Method |
+|---|---|
+| Dijkstra Corners | Shortest path over the wall end points pushed out by `cornerBuffer` (a visibility graph), smoothed by pchip interpolation |
+| Energy Efficient | As Dijkstra Corners, with a penalty on heading changes |
+| Grid A* | A* on an 8-connected occupancy grid (cell 0.5; cells closer than `clearance` = 1.2 to a wall are blocked), octile heuristic, then line-of-sight shortcuts; the standard grid-based baseline |
+
+## Getting started: a new monitoring problem
+
+`Examples/EventDetection/` builds a different persistent monitoring problem from scratch: security robots patrol a small museum, incidents occur at random at the targets and expire, and a robot at a target detects the incidents in progress. Four small classes define it, one per extension point:
+
+| Class | Base class | What it does |
+|---|---|---|
+| `EventTarget` | `Target` | Events arrive at random (rate `eventRate`) and last `lifetime` s; an agent at the target detects those in progress; `R` = events in progress |
+| `SimpleAgent` | `Agent` | Moves at its top speed from path point to path point |
+| `ChaseEventsPolicy` | `Policy` | Goes to the free neighbor with the most events in progress (else the one visited longest ago) |
+| `MissedEvents` | `Metric` | Share of the events that ended before an agent detected them |
+
+Each is one line in `ComponentRegistry`, so it appears in the GUI's dropdowns (Target Type, Agent Type, Active Policy, Objective) and in `runTrial` (`TargetType`, `AgentType`, `Policy`, `Metrics`). `eventDetectionExample.m` walks through the whole process in seven sections, each doing what the named GUI clicks do: import the floor plan, draw the walls, mark the targets, add the edges (the planner routes them around the walls), choose the new classes and place the robots, run, and compare policies headless with `runTrial`. It saves what the canvas shows after each step to `results/example/`. On the museum, Chase Events misses about 15% of the events and Random Walk about 44% (10 runs of 600 s).
+
 ## Adding a new modular class
 
 Each area has a dedicated folder under `Components/`. Creating a new algorithm takes two steps:
@@ -283,10 +316,10 @@ obj.pathPlanners('My Planner') = @() MyPlanner();
 
 Folder: `Components/AgentPolicy/`
 
-Create a class with a `plan` method that returns a move command struct:
+Subclass `Policy` and implement `plan`, which returns a move command struct:
 
 ```matlab
-classdef MyPolicy < handle
+classdef MyPolicy < Policy
     methods
         function cmd = plan(obj, agent, model, adj, curIdx, simTime)
             cmd = struct();
@@ -300,7 +333,7 @@ classdef MyPolicy < handle
 end
 ```
 
-Returning `struct()` (no `kind`) leaves the agent where it is; it asks again on the next step. Instead of `dwellSeconds`, a policy may set `agent.dwellRemaining` itself, as the RHC policies do.
+Returning `struct()` (no `kind`) leaves the agent where it is; it asks again on the next step. Instead of `dwellSeconds`, a policy may set `agent.dwellRemaining` itself, as the RHC policies do. Optional: `onStep(agent, model, simTime)` (called every step, to react to events during a dwell), `resetReservations()` (called on reset), and a constant `agentAssumption` (see the agent types section).
 
 Register it:
 ```matlab
@@ -346,3 +379,53 @@ obj.agentTypes('My Agent') = @(idx, pos, sp) MyAgent(idx, pos, sp);
 ```
 
 That's it — restart `runMainUI` and the new component will appear in its dropdown.
+
+### 4. New Target Type
+
+Folder: anywhere on the path (the example is in `Examples/EventDetection/`)
+
+Subclass `Target` and override `updateUncertainty(dt, simTime, mode)`; `R` is what the target's bar shows and what `J(t)` averages. `residingAgents` lists the agents at rest at the target.
+
+```matlab
+classdef MyTarget < Target
+    methods
+        function obj = MyTarget(index, position)
+            obj@Target(index, position);
+        end
+
+        function updateUncertainty(obj, dt, simTime, ~)
+            if isempty(obj.residingAgents), obj.R = obj.R + dt; else, obj.R = 0; end   % idleness
+        end
+    end
+end
+```
+
+Override `reset` (calling `reset@Target(obj)` first) to clear extra state. Register it:
+```matlab
+obj.targetTypes('My Target') = @(idx, pos) MyTarget(idx, pos);
+```
+The Target Type dropdown (or `model.setTargetType(name)`) rebuilds the scenario with targets of that type; layouts store it (`targetType`).
+
+### 5. New Metric
+
+Subclass `Metric` and implement `value(model, simTime)`; implement `update(model, simTime, dt)` too if the metric accumulates over the run (it is called after every step), and `reset(model)` to clear it.
+
+```matlab
+classdef PeakUncertainty < Metric
+    properties
+        peak = 0
+    end
+    methods
+        function obj = PeakUncertainty(), obj.label = "Largest R so far"; end
+        function reset(obj, ~), obj.peak = 0; end
+        function update(obj, model, ~, ~), obj.peak = max([obj.peak, model.targets.R]); end
+        function v = value(obj, ~, ~), v = obj.peak; end
+    end
+end
+```
+
+Register it:
+```matlab
+obj.metrics('Peak Uncertainty') = @() PeakUncertainty();
+```
+The Objective dropdown plots it over time; `runTrial` returns the final value of every metric named in `Metrics` (`out.metricValues.PeakUncertainty`).

@@ -11,6 +11,7 @@ rows = {
     "City patrol",         "CityPatrol.mat",    "Police patrol on a street grid: 16 intersections and 5 sites, 4 patrol cars on the roads."
     "Harbor patrol",       "HarborPatrol.mat",  "Harbor, piers, breakwater and two islands: 12 buoys and berths, 3 boats."
     "Campus",              "Campus.mat",        "Building complex with a pond, quad and parking: 11 sites, 5 agents."
+    "Museum (event detection example)", "Museum.mat", "Beginner's example (Examples/EventDetection): four galleries and a hall with event targets, 3 robots at speed 4."
     "JS: 1 agent, 3 targets",  "Legacy/JS_1Agent_3T.mat",      "Preset of the legacy JS simulator (RHC papers), scaled to the canvas."
     "JS: 1 agent, 4 targets",  "Legacy/JS_1Agent_4T.mat",      "Preset of the legacy JS simulator (RHC papers), scaled to the canvas."
     "JS: 1 agent, 5 targets",  "Legacy/JS_1Agent_5T.mat",      "Preset of the legacy JS simulator (RHC papers), scaled to the canvas."
