@@ -182,6 +182,24 @@ classdef guiTest < matlab.uitest.TestCase
             end
         end
 
+        function addsStationByClicking(tc)
+            % Add Station places a charging station with the power typed next to the button
+            tc.press(button(tc, 'Add Target'));
+            tc.press(tc.ui.ax, [20 50]);
+            tc.type(tc.ui.stationPowerField, 250);
+            tc.press(button(tc, 'Add Station'));
+            tc.press(tc.ui.ax, [70 50]);
+            m = tc.ui.model;
+            tc.verifyEqual(numel(m.targets), 2, 'station added by clicking');
+            tc.verifyClass(m.targets(2), 'ChargingStation');
+            tc.verifyEqual(m.targets(2).chargePower, 250, 'station power from the field');
+            tc.press(button(tc, 'Add Edge'));
+            tc.press(tc.ui.ax, [20 50]);
+            tc.press(tc.ui.ax, [70 50]);
+            tc.verifyEqual(numel(m.edges), 1, 'station connected like a target');
+            snap(tc, 'station_added');
+        end
+
         function addsTargetsOverBackgroundImage(tc)
             tc.ui.renderer.loadBackgroundImage(fullfile(tc.root, 'LabLayout.png'));
             tc.press(button(tc, 'Add Target'));

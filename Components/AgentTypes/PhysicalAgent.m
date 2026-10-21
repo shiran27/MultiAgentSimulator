@@ -4,7 +4,10 @@ classdef PhysicalAgent < Agent
     % PhysicalIntegrator) that tracks a planned reference motion with feedback
     % (TrackingController) and arrives when the plan says.
     %
-    % The reference keeps within planMargin of both limits (the rest is left to the feedback):
+    % The reference keeps within planMargin (1 by default: the full limits) of maxSpeed and
+    % maxAccel, the acceleration counting both its parts, sqrt(u^2 + (v^2 kappa)^2) <= maxAccel
+    % (the friction circle: the turn takes v^2 kappa across the path, the rest is left for u
+    % along it):
     %   - its path is the edge's path with each corner rounded over at most cornerRadius on
     %     either side, so speed and acceleration stay continuous along it
     %   - its speed profile is the planned one (the policy's profile and transit time, or the
@@ -25,7 +28,7 @@ classdef PhysicalAgent < Agent
     % in speed no physical agent can follow) the agent moves at its own fastest pace. Je counts
     % the full commanded acceleration (|a|^2, steering included).
     properties
-        planMargin = 0.8      % share of maxSpeed and maxAccel the reference may use
+        planMargin = 1        % share of maxSpeed and maxAccel the reference may use
         cornerRadius = 1.5    % largest stretch of path on either side of a corner that is rounded
     end
 
@@ -194,8 +197,8 @@ classdef PhysicalAgent < Agent
 
         function P = fastestProfile(obj, G)
             % The fastest rest-to-rest profile along G within the reference limits: speed at
-            % most vb, and |tangential acceleration| + speed^2 * curvature at most ub (forward
-            % pass accelerating, backward pass braking, on a grid that resolves every corner)
+            % most vb, and acceleration sqrt(u^2 + (v^2 kappa)^2) at most ub (forward pass
+            % accelerating, backward pass braking, on a grid that resolves every corner)
             vb = obj.planMargin * obj.state.maxSpeed;
             ub = obj.planMargin * obj.state.maxAccel;
             y = G.s(end);
@@ -209,10 +212,10 @@ classdef PhysicalAgent < Agent
             vlim = min(vb, sqrt(ub ./ kap));
             v = [0; min(vlim(1:end-1), vlim(2:end)); 0];
             for k = 1:numel(dl)                                     % accelerate
-                v(k + 1) = min(v(k + 1), sqrt(v(k)^2 + 2 * max(ub - v(k)^2 * kap(k), 0) * dl(k)));
+                v(k + 1) = min(v(k + 1), sqrt(v(k)^2 + 2 * sqrt(max(ub^2 - (v(k)^2 * kap(k))^2, 0)) * dl(k)));
             end
             for k = numel(dl):-1:1                                  % brake
-                v(k) = min(v(k), sqrt(v(k + 1)^2 + 2 * max(ub - v(k + 1)^2 * kap(k), 0) * dl(k)));
+                v(k) = min(v(k), sqrt(v(k + 1)^2 + 2 * sqrt(max(ub^2 - (v(k + 1)^2 * kap(k))^2, 0)) * dl(k)));
             end
             P = SpeedProfile.table(l, v);
         end
@@ -227,7 +230,7 @@ classdef PhysicalAgent < Agent
             l = zeros(size(t)); v = l; u = l;
             for k = 1:numel(t), [l(k), v(k), u(k)] = SpeedProfile.at(P, t(k)); end
             tol = 1 + 1e-6;
-            ok = all(v <= vb * tol) && all(abs(u) + v.^2 .* obj.curvature(G, l) <= ub * tol);
+            ok = all(v <= vb * tol) && all(hypot(u, v.^2 .* obj.curvature(G, l)) <= ub * tol);
         end
     end
 end

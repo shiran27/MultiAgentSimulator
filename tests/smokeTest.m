@@ -206,7 +206,11 @@ try   % smooth heading on a curved path
     a = AbstractAgent(1, P(1, :), 15); a.path = P; ori = []; om = [];
     while ~isempty(a.path), a.update(0.05); ori(end+1) = a.state.ori; om(end+1) = a.state.omega; end %#ok<AGROW>
     jump = max(abs(angle(exp(1i * diff(ori)))));
-    check(jump < 0.6 && all(isfinite(om)), sprintf('abstract agent heading on a curved edge: largest step %.2f rad, max |omega| %.1f rad/s', jump, max(abs(om))));
+    D = diff(P); th = atan2(D(:, 2), D(:, 1)); len = vecnorm(D, 2, 2);         % tightest turn of the path
+    rmin = min((len(1:end-1) + len(2:end)) / 2 ./ max(abs(angle(exp(1i * diff(th)))), eps));
+    bound = max(0.6, 1.2 * 15 * 0.05 / rmin);   % the turn the path itself asks for at speed 15
+    check(jump < bound && all(isfinite(om)), sprintf(['abstract agent heading on a curved edge: largest step %.2f rad ' ...
+        '(path''s tightest radius %.2f allows %.2f), max |omega| %.1f rad/s'], jump, rmin, bound, max(abs(om))));
 catch err
     check(false, "curved heading  ERROR " + err.message);
 end

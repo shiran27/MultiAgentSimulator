@@ -17,6 +17,7 @@ classdef MainUI < handle
         agentTypeDropdown
         targetTypeDropdown  % target type of every target (ScenarioModel.setTargetType)
         objectiveDropdown   % metric plotted in the objective window (ScenarioModel.metrics{1})
+        stationPowerField   % charging power of the stations added next (Add Station)
         registry
         model
         renderer
@@ -158,8 +159,8 @@ classdef MainUI < handle
             main = uigridlayout(obj.fig, [1 2], 'ColumnWidth', {280, '1x'});
             left = uigridlayout(main, [2 1], 'RowHeight', {'fit', 'fit'}, ...
                 'Padding', [0 0 0 0], 'Scrollable', 'on');
-            p  = uigridlayout(uipanel(left, 'Title','Tools'), [21 2], ...
-                'RowHeight', [repmat({'fit'}, 1, 20) {36}], 'ColumnWidth', {'1x', '1x'}, ...
+            p  = uigridlayout(uipanel(left, 'Title','Tools'), [22 2], ...
+                'RowHeight', [repmat({'fit'}, 1, 21) {36}], 'ColumnWidth', {'1x', '1x'}, ...
                 'RowSpacing', 5, 'Padding', [8 6 8 6]);
             tp = uigridlayout(uipanel(left, 'Title','Time Control & Analysis'), [7 4], ...
                 'RowHeight', repmat({'fit'}, 1, 7), 'ColumnWidth', {'fit', '1x', 'fit', '1x'}, ...
@@ -204,50 +205,57 @@ classdef MainUI < handle
             place(uibutton(p,'Text','Load Layout...', ...
                 'ButtonPushedFcn', @(~,~)obj.onLoadLayout()), 7, 2);
 
+            % Charging stations (ChargingStation): click to place one with the power on the right
+            place(uibutton(p,'Text','Add Station', ...
+                'ButtonPushedFcn', @(~,~)obj.setMode("addStation")), 8, 1);
+            obj.stationPowerField = place(uieditfield(p,'numeric','Value',100,'Limits',[0 Inf], ...
+                'ValueDisplayFormat', '%g W', 'Tooltip', 'Charging power of the stations added next', ...
+                'ValueChangedFcn', @(s,~)obj.onStationPowerChanged(s.Value)), 8, 2);
+
             % Settings of agents added next (agent type above, speed, acceleration, profile)
-            place(uilabel(p,'Text','Agent Speed:'), 8, 1);
-            obj.speedField = place(uieditfield(p,'numeric','Value',15,'Limits',[0.01 Inf]), 8, 2);
-            place(uilabel(p,'Text','Agent Accel:'), 9, 1);
+            place(uilabel(p,'Text','Agent Speed:'), 9, 1);
+            obj.speedField = place(uieditfield(p,'numeric','Value',15,'Limits',[0.01 Inf]), 9, 2);
+            place(uilabel(p,'Text','Agent Accel:'), 10, 1);
             obj.accelField = place(uieditfield(p,'numeric','Value',15,'Limits',[0.01 Inf], ...
-                'ValueChangedFcn', @(s,~)obj.onAgentAccelChanged(s.Value)), 9, 2);
-            place(uilabel(p,'Text','Speed Profile:'), 10, 1);
+                'ValueChangedFcn', @(s,~)obj.onAgentAccelChanged(s.Value)), 10, 2);
+            place(uilabel(p,'Text','Speed Profile:'), 11, 1);
             obj.profileDropdown = place(uidropdown(p, ...
                 'Items', {'Constant', 'SO (smooth)', 'FO (trapezoid)'}, 'ItemsData', cellstr(SpeedProfile.names), ...
                 'Value', 'constant', ...
-                'ValueChangedFcn', @(s,~)obj.onAgentProfileChanged(s.Value)), 10, 2);
+                'ValueChangedFcn', @(s,~)obj.onAgentProfileChanged(s.Value)), 11, 2);
 
-            place(uilabel(p,'Text','Path Planner:'), 11, 1);
+            place(uilabel(p,'Text','Path Planner:'), 12, 1);
             obj.plannerDropdown = place(uidropdown(p, ...
                 'Items', obj.registry.keysFor('pathplanner'), 'Value', 'Dijkstra Corners', ...
-                'ValueChangedFcn', @(s,~)obj.onPlannerChanged(s.Value)), 11, 2);
+                'ValueChangedFcn', @(s,~)obj.onPlannerChanged(s.Value)), 12, 2);
 
             % Active Policy Selector (full width so long policy names fit)
-            place(uilabel(p,'Text','Active Policy:', 'FontWeight','bold'), 12, [1 2]);
+            place(uilabel(p,'Text','Active Policy:', 'FontWeight','bold'), 13, [1 2]);
             obj.policyDropdown = place(uidropdown(p, ...
                 'Items', obj.registry.keysFor('policy'), ...
                 'Value', 'Random Walk', ...
-                'ValueChangedFcn', @(s,~)obj.onPolicyChanged(s.Value)), 13, [1 2]);
+                'ValueChangedFcn', @(s,~)obj.onPolicyChanged(s.Value)), 14, [1 2]);
 
             % Target type (its dynamics); the uncertainty mode of the default Uncertainty Target:
             % constant A_i by default (as in the paper), spikes are opt-in
-            place(uilabel(p,'Text','Targets:', 'FontWeight','bold'), 14, [1 2]);
+            place(uilabel(p,'Text','Targets:', 'FontWeight','bold'), 15, [1 2]);
             obj.targetTypeDropdown = place(uidropdown(p, ...
                 'Items', obj.registry.keysFor('targettype'), 'Value', 'Uncertainty Target', ...
-                'ValueChangedFcn', @(s,~)obj.onTargetTypeChanged(s.Value)), 15, [1 2]);
+                'ValueChangedFcn', @(s,~)obj.onTargetTypeChanged(s.Value)), 16, [1 2]);
             obj.uncertaintyDropdown = place(uidropdown(p, ...
                 'Items', ScenarioModel.UncertaintyModes, ...
                 'Value', 'Static Uniform', ...
-                'ValueChangedFcn', @(s,~)obj.onUncertaintyModeChanged(s.Value)), 16, [1 2]);
+                'ValueChangedFcn', @(s,~)obj.onUncertaintyModeChanged(s.Value)), 17, [1 2]);
 
             % Objective: the metric plotted over time in the objective window
-            place(uilabel(p,'Text','Objective:', 'FontWeight','bold'), 17, [1 2]);
+            place(uilabel(p,'Text','Objective:', 'FontWeight','bold'), 18, [1 2]);
             obj.objectiveDropdown = place(uidropdown(p, ...
                 'Items', obj.registry.keysFor('metric'), 'Value', 'Average Uncertainty J(t)', ...
-                'ValueChangedFcn', @(s,~)obj.onObjectiveChanged(s.Value)), 18, [1 2]);
+                'ValueChangedFcn', @(s,~)obj.onObjectiveChanged(s.Value)), 19, [1 2]);
 
-            obj.modeLabel = place(uilabel(p,'Text','Mode: idle', 'FontWeight','bold'), 20, [1 2]);
+            obj.modeLabel = place(uilabel(p,'Text','Mode: idle', 'FontWeight','bold'), 21, [1 2]);
             obj.statusLabel = place(uilabel(p,'Text','', 'WordWrap','on', ...
-                'VerticalAlignment','top'), 21, [1 2]);
+                'VerticalAlignment','top'), 22, [1 2]);
 
             obj.ax.PickableParts = 'all';
             obj.ax.HitTest = 'on';
@@ -411,6 +419,10 @@ classdef MainUI < handle
             m = obj.model.metrics{1};
             obj.objectiveWin.setObjective(m.label, m.plotMax);
             obj.setStatus(sprintf('Objective: %s', name));
+        end
+
+        function onStationPowerChanged(obj, value)
+            obj.controller.stationPower = value;
         end
 
         function onAgentAccelChanged(obj, value)

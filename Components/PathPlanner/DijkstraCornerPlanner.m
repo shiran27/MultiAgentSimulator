@@ -1,8 +1,16 @@
 classdef DijkstraCornerPlanner < PathPlanner
+    % Shortest path over a visibility graph: the nodes are the start, the end, and the wall end
+    % points pushed out by cornerBuffer (dropped when closer than wallProximity to a wall); two
+    % nodes are joined when the segment between them crosses no wall. Dijkstra's algorithm finds
+    % the shortest route, and PathSmoother replaces each corner with the largest circular arc
+    % that keeps filletClearance from the walls (radius at most filletRadius), so the heading
+    % is continuous and the curvature bounded.
     properties
         cornerBuffer double = 1.2
         wallProximity double = 0.6
-        smoothingFactor double = 10
+        filletRadius double = 10      % largest corner arc radius
+        filletClearance double = 0.6  % smallest distance from a corner arc to the walls
+        pathSpacing double = 0.5      % largest distance between path points
         endpointTol double = 1e-6
     end
 
@@ -26,22 +34,27 @@ classdef DijkstraCornerPlanner < PathPlanner
                 end
             end
             pathIndices = obj.dijkstra(adj, 1, 2);
-            rawPath = nodes(pathIndices, :);
-            path = obj.smoothPath(rawPath);
-            path = obj.clampToBounds(path, bounds);
+            path = obj.finishPath(nodes, pathIndices, walls, bounds);
         end
     end
 
     methods (Access=protected)
-        function smoothed = smoothPath(obj, path)
-            if size(path, 1) < 3
-                smoothed = path;
+        function path = finishPath(obj, nodes, idxs, walls, bounds)
+            % The route through nodes(idxs), smoothed and kept in bounds; the straight line
+            % (and noRoute) when the end is unreachable
+            obj.noRoute = numel(idxs) < 2 || idxs(1) ~= 1;
+            if obj.noRoute
+                warning('PathPlanner:NoRoute', 'No wall-free route from [%g %g] to [%g %g]; using the straight line.', ...
+                    nodes(1, 1), nodes(1, 2), nodes(2, 1), nodes(2, 2));
+                path = PathSmoother.sample(nodes([1 2], :), obj.pathSpacing);
                 return;
             end
-            t = 1:size(path, 1);
-            ts = linspace(1, size(path, 1), size(path, 1) * obj.smoothingFactor);
-            smoothed = [interp1(t, path(:,1), ts, 'pchip')', ...
-                        interp1(t, path(:,2), ts, 'pchip')'];
+            path = obj.smoothPath(nodes(idxs, :), walls);
+            path = obj.clampToBounds(path, bounds);
+        end
+
+        function smoothed = smoothPath(obj, path, walls)
+            smoothed = PathSmoother.fillet(path, walls, obj.filletClearance, obj.filletRadius, obj.pathSpacing);
         end
 
         function clipped = clampToBounds(~, path, bounds)

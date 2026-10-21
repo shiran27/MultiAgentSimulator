@@ -140,6 +140,7 @@ slopeJ = c(1);
 out = struct('finalJ', finalJ, 'steadyJ', steadyJ, 'slopeJ', slopeJ, ...
     'peakR', peakR, 'coLocationTime', coLocationTime, 'policy', pol);
 out.metricValues = model.metricValues(clock.currentTime);
+out.collisions = sum(model.collisions);   % steps in which an agent's motion crossed a wall
 % Energy-aware RHC metrics (paper eqs. 3 and 73): Je = sum of int |u|^2 dt (NaN when an agent
 % used a "constant" profile), peak speed and acceleration; Js = finalJ; JT = energyWeight * Je + Js.
 out.Je = NaN; out.JT = NaN; out.vmax = NaN; out.umax = NaN;

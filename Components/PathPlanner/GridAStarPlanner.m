@@ -5,13 +5,17 @@ classdef GridAStarPlanner < PathPlanner
     % inflated by the robot's clearance). A* with the octile-distance heuristic (admissible
     % and consistent on this grid) finds the shortest grid path; it is then shortened by
     % line-of-sight shortcuts (each point is joined to the farthest later point it can see
-    % with the clearance kept), which removes the grid's zig-zag. With smooth = false the
-    % raw grid path is returned.
+    % with the clearance kept), which removes the grid's zig-zag, and its corners are replaced
+    % by circular arcs (PathSmoother; radius at most filletRadius, at least filletClearance
+    % from the walls). With smooth = false the raw grid path is returned.
     % The grid is built once per set of walls and bounds and reused for every edge.
     properties
         resolution = 0.5    % cell side
         clearance = 1.2     % smallest distance kept from the walls (as DijkstraCornerPlanner)
-        smooth = true       % shorten the grid path with line-of-sight shortcuts
+        smooth = true       % shorten the grid path with line-of-sight shortcuts and round its corners
+        filletRadius = 10   % largest corner arc radius
+        filletClearance = 0.6   % smallest distance from a corner arc to the walls
+        pathSpacing = 0.5   % largest distance between path points
     end
 
     properties (Access = private)
@@ -28,14 +32,20 @@ classdef GridAStarPlanner < PathPlanner
             s = obj.nearestFree(pStart);
             g = obj.nearestFree(pEnd);
             cells = obj.astar(s, g);
-            if isempty(cells)                                % no route: straight line
-                path = [pStart; pEnd];
+            obj.noRoute = isempty(cells);
+            if obj.noRoute                                   % no route: straight line
+                warning('PathPlanner:NoRoute', 'No wall-free route from [%g %g] to [%g %g]; using the straight line.', ...
+                    pStart(1), pStart(2), pEnd(1), pEnd(2));
+                path = PathSmoother.sample([pStart; pEnd], obj.pathSpacing);
                 return;
             end
             [r, c] = ind2sub(size(obj.free), cells);
             path = [pStart; obj.xs(c)', obj.ys(r)'; pEnd];
             path = path([true; any(diff(path, 1, 1) ~= 0, 2)], :);   % drop repeated points
-            if obj.smooth, path = obj.shortcut(path, walls); end
+            if obj.smooth
+                path = obj.shortcut(path, walls);
+                path = PathSmoother.fillet(path, walls, obj.filletClearance, obj.filletRadius, obj.pathSpacing);
+            end
         end
     end
 

@@ -129,7 +129,7 @@ There are two agent types (`Components/AgentTypes/`): the **Abstract Agent**, an
 
 | | Abstract Agent (`AbstractAgent`) | Physical Agent (`PhysicalAgent`) |
 |---|---|---|
-| Motion | Follows its speed profile exactly along the path (arc length), at rest on the targets | Double integrator (speed and acceleration saturate at `maxSpeed` and `maxAccel`) with a PD law and feedforward tracking a reference it can follow: the path with its corners rounded, and a speed profile within `planMargin` (0.8) of both limits that slows down for turns |
+| Motion | Follows its speed profile exactly along the path (arc length), at rest on the targets | Double integrator (speed and acceleration saturate at `maxSpeed` and `maxAccel`) with a PD law and feedforward tracking a reference it can follow: the path with its corners rounded, and a speed profile within the full limits (`planMargin` = 1; the acceleration counts its part along the path and the turn's part across it, sqrt(u² + (v²κ)²) ≤ `maxAccel`) that slows down for turns |
 | Timing | Every transit takes exactly the planned time | Arrives within a step or two of the planned time, if the plan is at least its `shortestTransit(path)`; otherwise it takes `shortestTransit`. The RHC policies plan with it |
 | Model of | The event-driven RHC papers: first-order agent (`"constant"` profile) or energy-optimal second-order agent (`"SO"`, `"FO"`) | A physical robot executing the same plan with feedback |
 | `J_e` | Tangential acceleration only (NaN with `"constant"`: impulses) | Full commanded acceleration |
@@ -240,7 +240,7 @@ Agents may share targets. During a spike that the agents present cannot overcome
 
 `Battery-Aware ED-RHC` (`Components/AgentPolicy/BatteryAwareRHCPolicy.m`, a subclass of `EDRHCPolicy`) keeps every agent able to reach a charging station. It replaces Gabriel's `Battery Efficient` heuristic (nearest-neighbor moves with short random dwells, longer at low SOC, never recharging), retired on 2026-10-21; its code is kept in `Old_Design/` for reference, and old scripts that ask for it get an error naming the replacements.
 
-- **Charging stations** (`Components/ChargingStation.m`, a `Target` subclass). A station has no uncertainty (`R = A = 0`) and is drawn as a yellow square. Every agent at rest there recharges at `chargePower` (W) until full; the agent still draws its idle power. Layouts place stations by target index (fields `chargers`, `chargePower`). Other policies treat a station as an ordinary node.
+- **Charging stations** (`Components/ChargingStation.m`, a `Target` subclass). A station has no uncertainty (`R = A = 0`) and is drawn as a yellow square. Every agent at rest there recharges at `chargePower` (W) until full; the agent still draws its idle power. Layouts place stations by target index (fields `chargers`, `chargePower`); in the GUI, **Add Station** places one with the power typed next to it (`ScenarioModel.addStation(pos, power)` in code), and Add Edge connects it like a target. Other policies treat a station as an ordinary node.
 - **Energy of a plan.** Each agent predicts its battery energy from the battery's power model (`Battery`):
   - at rest: `idlePower` per second;
   - a transit of length `y` in time `rho`: `Agent.transitEnergy(path, rho)` = `movePower * rho + (alphaVel * y + gammaAcc * int |a|^2 dt) / eta`. The speed term integrates to `alphaVel * y` for any speed profile. A Physical Agent computes `int |a|^2 dt` from the reference it will follow.
@@ -302,9 +302,13 @@ Every edge's path is planned once, when the edge is added (and again when walls 
 
 | Planner | Method |
 |---|---|
-| Dijkstra Corners | Shortest path over the wall end points pushed out by `cornerBuffer` (a visibility graph), smoothed by pchip interpolation |
-| Energy Efficient | As Dijkstra Corners, with a penalty on heading changes |
+| Dijkstra Corners | Shortest path over the wall end points pushed out by `cornerBuffer` = 1.2 (a visibility graph) |
+| Energy Efficient | As Dijkstra Corners, with a penalty on heading changes and corners pushed further out (`cornerBuffer` = 2.5) |
 | Grid A* | A* on an 8-connected occupancy grid (cell 0.5; cells closer than `clearance` = 1.2 to a wall are blocked), octile heuristic, then line-of-sight shortcuts; the standard grid-based baseline |
+
+Every planner then rounds the corners of its route (`PathSmoother.fillet`): each corner becomes a circular arc tangent to both segments, as large as the segments allow (radius at most `filletRadius` = 10), shrunk until it keeps `filletClearance` (0.6; 1.0 for Energy Efficient) from every wall. The heading is continuous and the curvature bounded, so Physical Agents keep their speed through turns: with the full acceleration limit, their transits on the maps take 14–19% less time than with the earlier pchip-smoothed paths and the 80% margin. When no wall-free route exists, a planner returns the straight line and sets `noRoute`; the GUI says so when the edge is added.
+
+**Walls during motion.** Paths avoid the walls, but an agent can still leave its path (for example, a user-defined agent). After every step the model checks whether an agent's motion crossed a wall; if it did, the agent stops just before the wall and the collision is counted (`ScenarioModel.collisions`, `runTrial` output `collisions`).
 
 ## Getting started: a new monitoring problem
 

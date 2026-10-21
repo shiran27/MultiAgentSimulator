@@ -11,6 +11,9 @@ function extensionTest()
 %    missed; SimplePolicy misses fewer events than Random Walk.
 % 4. Grid A*: paths start and end at the targets, never cross a wall, and are no longer than
 %    the Dijkstra Corners paths by more than 5% on any map.
+% 5. Every planner's paths have no sharp corners; an unreachable target gives a straight edge
+%    with a warning; stations (addStation) save and reload; Physical Agents on the lab never
+%    cross a wall; an agent driven into a wall stops at it and the collision is counted.
 % Prints one line per check and errors at the end (non-zero exit under -batch) if any failed.
 
 root = fileparts(fileparts(mfilename('fullpath')));
@@ -93,6 +96,41 @@ for k = 1:height(cat)
     check(ends && cross == 0 && longer <= 0.05, sprintf('Grid A* on "%s": ends at the targets, %d wall crossings, at most %.1f%% longer than Dijkstra Corners', ...
         cat.Name(k), cross, 100 * longer));
 end
+
+% ---- 5. Smooth planner paths, unreachable targets, stations, collisions ----
+for pl = {DijkstraCornerPlanner(), EnergyEfficientPlanner(), GridAStarPlanner()}
+    m = ScenarioModel(pl{1});
+    m.importLayout(load(fullfile(root, 'Configurations', 'ReportLayout.mat')).s);
+    turn = 0; rmin = Inf;
+    for e = m.edges
+        D = diff(e.curvePoints); th = atan2(D(:, 2), D(:, 1)); len = vecnorm(D, 2, 2);
+        dth = abs(angle(exp(1i * diff(th))));
+        turn = max([turn; dth]);
+        rmin = min([rmin; (len(1:end-1) + len(2:end)) / 2 ./ max(dth, eps)]);
+    end
+    check(turn <= 0.21 && rmin >= 0.5, sprintf('%s: no sharp corners left (largest heading change between path points %.2f rad, tightest turn radius %.2f)', ...
+        class(pl{1}), turn, rmin));
+end
+m = ScenarioModel();
+m.addTarget([20 50]); m.addTarget([80 50]);
+m.walls = [50 0 50 100];                                   % a wall across the whole canvas
+warning('off', 'PathPlanner:NoRoute');
+[~, ok, msg] = m.addEdgeByTargets(1, 2);
+warning('on', 'PathPlanner:NoRoute');
+check(ok && contains(msg, "No wall-free route") && m.pathPlanner.noRoute, 'unreachable target: straight edge with a warning');
+m = ScenarioModel();
+m.addTarget([20 50]); st = m.addStation([80 50], 250); m.addEdgeByTargets(1, 2);
+s2 = m.exportLayout(); m2 = ScenarioModel(); m2.importLayout(s2);
+check(isa(m2.targets(2), 'ChargingStation') && m2.targets(2).chargePower == 250, 'addStation: station saved and reloaded with its power');
+out = runTrial(struct('Layout', "ReportLayout.mat", 'Policy', "ED-RHC", 'AgentType', "Physical Agent", ...
+    'AgentStarts', "layout", 'UncertaintyMode', "Static Uniform", 'EndTime', 60, 'Seed', 1));
+check(out.collisions == 0, 'Physical Agents on the lab: no wall crossings in 60 s');
+m = ScenarioModel(); m.addTarget([20 50]); m.addTarget([80 50]); m.addEdgeByTargets(1, 2);
+m.addAgentOnTarget([20 50], 15, 1e-6); m.walls = [50 40 50 60];   % a wall added after the edge
+m.agents(1).path = m.edges(1).curvePoints; m.resetSimulationState();
+m.agents(1).path = m.edges(1).curvePoints; m.agents(1).current_target_idx = 2;
+for k = 1:100, m.step(0.05, k * 0.05); end
+check(m.collisions(1) > 0 && m.agents(1).state.pos(1) < 50, 'an agent driven into a wall stops at it and the collision is counted');
 
 if isempty(failures)
     fprintf('\nextensionTest PASSED: %d checks\n', nChecks);

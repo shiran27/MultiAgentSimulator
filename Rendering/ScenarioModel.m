@@ -18,6 +18,9 @@ classdef ScenarioModel < handle
         metrics = {}            % Metric objects updated every step; the first is the objective
                                 % plotted in the GUI (default: AverageUncertainty, J(t))
         bounds = [0 100 0 100]  % [xMin xMax yMin yMax]
+        collisions = []         % per agent: steps in which its motion crossed a wall (it was then
+                                % stopped at the wall); planned paths avoid walls, so this stays 0
+                                % unless an agent leaves its path
         detectionRadius = 1.2   % an agent at rest (not in transit) this close to a target services it
         agentSpec = AgentSpec() % spec (settings) of the agents added next; the type is agentFactory
         background = ""         % background image of the layout (file name; see backgroundFile)
@@ -229,6 +232,7 @@ classdef ScenarioModel < handle
                         end
                     end
                 end
+                p0 = a.state.pos;
                 if a.dwellRemaining > 0
                     % Dwelling: hold at the current target before following the new path
                     a.dwellRemaining = max(0, a.dwellRemaining - dtSim);
@@ -236,7 +240,26 @@ classdef ScenarioModel < handle
                 else
                     a.update(dtSim);
                 end
+                obj.stopAtWalls(k, a, p0);
             end
+        end
+
+        function stopAtWalls(obj, k, a, p0)
+            % If agent k's motion in this step (p0 to its new position) crossed a wall, it stops
+            % just before the wall and the collision is counted
+            p1 = a.state.pos;
+            if isempty(obj.walls) || isequal(p0, p1), return; end
+            W = obj.walls; c = W(:, 1:2); d = W(:, 3:4); v = p1 - p0;
+            den = (d(:, 2) - c(:, 2)) * v(1) - (d(:, 1) - c(:, 1)) * v(2);
+            ua = ((d(:, 1) - c(:, 1)) .* (p0(2) - c(:, 2)) - (d(:, 2) - c(:, 2)) .* (p0(1) - c(:, 1))) ./ den;
+            ub = (v(1) * (p0(2) - c(:, 2)) - v(2) * (p0(1) - c(:, 1))) ./ den;
+            hit = abs(den) > 1e-12 & ua > 1e-9 & ua <= 1 & ub >= 0 & ub <= 1;
+            if ~any(hit), return; end
+            t = min(ua(hit));
+            a.state.pos = p0 + max(0, t - 1e-3) * v;
+            a.state.vel = [0 0];
+            if numel(obj.collisions) < k, obj.collisions(k) = 0; end
+            obj.collisions(k) = obj.collisions(k) + 1;
         end
 
         function holdAgent(~, a, dtSim)
@@ -283,6 +306,9 @@ classdef ScenarioModel < handle
             e = Edge(idx, [obj.targets(t1Idx), obj.targets(t2Idx)], pathPoints);
             obj.edges(end+1) = e;
             ok = true;
+            if isprop(obj.pathPlanner, 'noRoute') && obj.pathPlanner.noRoute
+                msg = sprintf("No wall-free route from T%d to T%d: the edge is a straight line through the walls.", t1Idx, t2Idx);
+            end
         end
 
         function path = planShortestPath(obj, pStart, pEnd)
@@ -363,6 +389,14 @@ classdef ScenarioModel < handle
             end
         end
 
+        function t = addStation(obj, pos, chargePower)
+            % A charging station (ChargingStation) at pos, numbered like a target; connect it
+            % with edges as any target. chargePower [W] defaults to the station's own default
+            t = ChargingStation(numel(obj.targets) + 1, pos);
+            if nargin > 2, t.chargePower = chargePower; end
+            obj.targets(end+1) = t;
+        end
+
         function t = addTarget(obj, pos)
             t = obj.targetFactory(numel(obj.targets) + 1, pos);
             obj.targets(end+1) = t;
@@ -409,6 +443,7 @@ classdef ScenarioModel < handle
             for t = 1:numel(obj.targets), obj.targets(t).reset(); end
             obj.resetPolicyReservations();
             for k = 1:numel(obj.metrics), obj.metrics{k}.reset(obj); end
+            obj.collisions = zeros(1, numel(obj.agents));
         end
 
         function [idx, dist] = findNearestTarget(obj, pos)
