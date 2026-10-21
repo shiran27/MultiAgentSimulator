@@ -5,7 +5,7 @@ classdef Target < handle & matlab.mixin.Heterogeneous
     % A new target type subclasses Target and overrides updateUncertainty(dt, simTime, mode) (and
     % reset, for extra state); R is what the target's bar shows and what the objective sums. It
     % is registered in ComponentRegistry (targetTypes) and chosen with ScenarioModel.setTargetType
-    % or the GUI's Target Type dropdown. Examples/EventDetection/EventTarget.m is a small example.
+    % or the GUI's Target Type dropdown. Examples/EventDetection/SimpleTarget.m is a small example.
     properties
         index
         position

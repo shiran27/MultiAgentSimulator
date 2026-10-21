@@ -336,7 +336,7 @@ function [name, s, draw] = museum()
 % A small museum for the beginner's example (Examples/EventDetection): four galleries around a
 % plus-shaped hall, each open to the atrium at its inner corner. Every wall and target lies on
 % the GUI's 5-unit click grid, so the layout can be rebuilt by clicking on the image; its
-% targets are event targets (EventTarget). The outer walls are walls too: without them, the
+% targets are event targets (SimpleTarget). The outer walls are walls too: without them, the
 % shortest way around an inner wall that ends at the outer wall would pass outside.
 name = "Museum";
 inner = [40 10 40 30; 10 40 30 40; 40 90 40 70; 10 60 30 60
@@ -346,7 +346,7 @@ walls = [inner; outer];
 targets = [20 20; 20 80; 80 20; 80 80; 50 15; 15 50; 50 85; 85 50; 50 50];
 edges = [9 5; 9 6; 9 7; 9 8; 1 9; 2 9; 3 9; 4 9; 1 5; 2 6; 4 7; 3 8];
 s = layout(targets, edges, walls, [9 1 4], 4, ones(9, 1));   % slow indoor robots
-s.targetType = "Event Target (example)";
+s.targetType = "Simple Target (example)";
 draw = @drawMuseum;
 
     function drawMuseum(ax)

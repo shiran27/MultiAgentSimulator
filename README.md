@@ -58,7 +58,7 @@ The **Scenario** dropdown (top of the Tools panel; `MainUI.loadScenario(name)` i
 | City patrol | `CityPatrol.mat` | Police patrol on a street grid: 16 intersections and 5 sites (police HQ, bank, school, mall, hospital); every edge runs along a road, so the 4 patrol cars stay on the roads; the nine blocks are obstacles |
 | Harbor patrol | `HarborPatrol.mat` | Coast with a port, piers and a breakwater, two islands; 12 buoys and berths, 3 boats |
 | Campus | `Campus.mat` | Zoomed-out building complex: six buildings and a pond (obstacles), quad, parking; 11 sites, 5 agents |
-| Museum (event detection example) | `Museum.mat` | The beginner's example: four galleries around a hall, event targets (`EventTarget`), 3 robots at speed 4; every wall and target on the GUI's click grid |
+| Museum (event detection example) | `Museum.mat` | The beginner's example: four galleries around a hall, event targets (`SimpleTarget`), 3 robots at speed 4; every wall and target on the GUI's click grid |
 | JS: ... | `Legacy/JS_*.mat` | The eight presets of the legacy JS simulator (RHC papers), scaled to the canvas |
 
 `Configurations/scenarioCatalog.m` lists them. `Configurations/makeScenarioLayouts.m` draws the maps (`Configurations/backgrounds/*.png`) and writes their layouts from the same geometry, so walls line up with the drawn walls, buildings, coasts and piers. It also restyles the lab floor plan (`LabLayout.png`) in the same palette as `backgrounds/LabFloor.png`. Edit it to change a scenario, or add a row to the catalog for a new layout file.
@@ -313,12 +313,12 @@ Every edge's path is planned once, when the edge is added (and again when walls 
 
 | Class | Base class | What it does |
 |---|---|---|
-| `EventTarget` | `Target` | Events arrive at random (rate `eventRate`) and last `lifetime` s; an agent at the target detects those in progress; `R` = events in progress |
+| `SimpleTarget` | `Target` | Events arrive at random (rate `eventRate`) and last `lifetime` s; an agent at the target detects those in progress; `R` = events in progress |
 | `SimpleAgent` | `Agent` | Moves at its top speed from path point to path point |
-| `ChaseEventsPolicy` | `Policy` | Goes to the free neighbor with the most events in progress (else the one visited longest ago) |
-| `MissedEvents` | `Metric` | Share of the events that ended before an agent detected them |
+| `SimplePolicy` | `Policy` | Goes to the free neighbor with the most events in progress (else the one visited longest ago) |
+| `SimpleMetric` | `Metric` | Share of the events that ended before an agent detected them |
 
-Each is one line in `ComponentRegistry`, so it appears in the GUI's dropdowns (Target Type, Agent Type, Active Policy, Objective) and in `runTrial` (`TargetType`, `AgentType`, `Policy`, `Metrics`). `eventDetectionExample.m` walks through the whole process in seven sections, each doing what the named GUI clicks do: import the floor plan, draw the walls, mark the targets, add the edges (the planner routes them around the walls), choose the new classes and place the robots, run, and compare policies headless with `runTrial`. It saves what the canvas shows after each step to `results/example/`. On the museum, Chase Events misses about 15% of the events and Random Walk about 45% (10 runs of 600 s).
+Each is one line in `ComponentRegistry`, so it appears in the GUI's dropdowns (Target Type, Agent Type, Active Policy, Objective) and in `runTrial` (`TargetType`, `AgentType`, `Policy`, `Metrics`). `eventDetectionExample.m` walks through the whole process in seven sections, each doing what the named GUI clicks do: import the floor plan, draw the walls, mark the targets, add the edges (the planner routes them around the walls), choose the new classes and place the robots, run, and compare policies headless with `runTrial`. It saves what the canvas shows after each step to `results/example/`. On the museum, SimplePolicy misses about 15% of the events and Random Walk about 45% (10 runs of 600 s).
 
 ## Adding a new modular class
 

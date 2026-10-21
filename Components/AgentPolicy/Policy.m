@@ -16,7 +16,7 @@ classdef (Abstract) Policy < handle
     %   agentAssumption (Constant)      what the policy assumes of the agents' motion: "any",
     %                                   "plans transit" or "constant speed"
     % Register a new policy in ComponentRegistry (policies) to list it in the GUI and runTrial.
-    % Examples/EventDetection/ChaseEventsPolicy.m is a small example.
+    % Examples/EventDetection/SimplePolicy.m is a small example.
     methods (Abstract)
         cmd = plan(obj, agent, model, adj, curIdx, simTime)
     end

@@ -6,9 +6,9 @@ function extensionTest()
 %    positions, edges, walls and agents; layouts store the type.
 % 2. Metrics: the default objective is J(t) (AverageUncertainty), equal to the integral the
 %    model keeps; setMetrics changes the objective; runTrial returns metricValues.
-% 3. The event-detection example (Examples/EventDetection): EventTarget, SimpleAgent,
-%    ChaseEventsPolicy and MissedEvents run on the Museum layout; events are detected and
-%    missed; Chase Events misses fewer events than Random Walk.
+% 3. The event-detection example (Examples/EventDetection): SimpleTarget, SimpleAgent,
+%    SimplePolicy and SimpleMetric run on the Museum layout; events are detected and
+%    missed; SimplePolicy misses fewer events than Random Walk.
 % 4. Grid A*: paths start and end at the targets, never cross a wall, and are no longer than
 %    the Dijkstra Corners paths by more than 5% on any map.
 % Prints one line per check and errors at the end (non-zero exit under -batch) if any failed.
@@ -24,7 +24,7 @@ museum = museum.s;
 % ---- 1. Target types ----
 m = ScenarioModel();
 m.importLayout(museum);
-check(all(arrayfun(@(t) isa(t, 'EventTarget'), m.targets)), 'Museum layout loads event targets (stored targetType)');
+check(all(arrayfun(@(t) isa(t, 'SimpleTarget'), m.targets)), 'Museum layout loads event targets (stored targetType)');
 nE = numel(m.edges); nW = size(m.walls, 1); nA = numel(m.agents); P = reshape([m.targets.position], 2, []).';
 m.setTargetType("Uncertainty Target");
 check(all(arrayfun(@(t) strcmp(class(t), 'Target'), m.targets)), 'setTargetType switches every target to the new class');
@@ -38,28 +38,28 @@ out = runTrial(struct('Layout', "ReportLayout.mat", 'Policy', "Random Walk", 'Ag
     'UncertaintyMode', "Static Uniform", 'EndTime', 20, 'Seed', 1));
 check(abs(out.metricValues.AverageUncertainty - out.finalJ) < 1e-12, 'default objective is J(t) (AverageUncertainty = finalJ)');
 m = ScenarioModel();
-m.setMetrics(["Missed Events (example)", "Average Uncertainty J(t)"]);
-check(isa(m.metrics{1}, 'MissedEvents') && isa(m.metrics{2}, 'AverageUncertainty'), 'setMetrics sets the objective first');
+m.setMetrics(["Simple Metric (example)", "Average Uncertainty J(t)"]);
+check(isa(m.metrics{1}, 'SimpleMetric') && isa(m.metrics{2}, 'AverageUncertainty'), 'setMetrics sets the objective first');
 
 % ---- 3. Event-detection example ----
 missed = zeros(2, 3);
-policies = ["Chase Events (example)", "Random Walk"];
+policies = ["Simple Policy (example)", "Random Walk"];
 for i = 1:2
     for seed = 1:3
         out = runTrial(struct('Layout', "Museum.mat", 'Policy', policies(i), 'AgentStarts', "layout", ...
             'AgentType', "Simple Agent (example)", 'AgentSpeed', 4, 'EndTime', 300, 'Seed', seed, ...
-            'Metrics', ["Missed Events (example)", "Average Uncertainty J(t)"]));
-        missed(i, seed) = out.metricValues.MissedEvents;
+            'Metrics', ["Simple Metric (example)", "Average Uncertainty J(t)"]));
+        missed(i, seed) = out.metricValues.SimpleMetric;
         if i == 1 && seed == 1
-            check(isfinite(out.finalJ) && out.finalJ == out.metricValues.MissedEvents, ...
+            check(isfinite(out.finalJ) && out.finalJ == out.metricValues.SimpleMetric, ...
                 'runTrial: finalJ is the first metric (share of events missed)');
         end
     end
 end
-check(all(missed(:) >= 0 & missed(:) <= 1), 'MissedEvents is a share in [0, 1]');
-check(mean(missed(1, :)) < mean(missed(2, :)), sprintf('Chase Events misses fewer events than Random Walk (%.2f vs %.2f)', ...
+check(all(missed(:) >= 0 & missed(:) <= 1), 'SimpleMetric is a share in [0, 1]');
+check(mean(missed(1, :)) < mean(missed(2, :)), sprintf('SimplePolicy misses fewer events than Random Walk (%.2f vs %.2f)', ...
     mean(missed(1, :)), mean(missed(2, :))));
-m = ScenarioModel(); m.importLayout(museum); m.setActivePolicy('Chase Events (example)');
+m = ScenarioModel(); m.importLayout(museum); m.setActivePolicy('Simple Policy (example)');
 for a = m.agents, a.state.maxSpeed = 4; end
 m.resetSimulationState(); rng(2);
 clock = SimulationClock(200, 0.05);
@@ -69,7 +69,7 @@ end
 check(sum([m.targets.detected]) > 0 && sum([m.targets.missed]) >= 0 && all([m.targets.R] >= 0), ...
     sprintf('event targets detect events (%d detected, %d missed in 200 s)', sum([m.targets.detected]), sum([m.targets.missed])));
 moved = arrayfun(@(a) norm(a.state.pos - a.initialPosition) > 0 || a.current_target_idx ~= a.initialTargetIdx, m.agents);
-check(any(moved), 'Chase Events moves the agents');
+check(any(moved), 'SimplePolicy moves the agents');
 
 % ---- 4. Grid A* ----
 cat = scenarioCatalog();

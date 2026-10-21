@@ -2,10 +2,10 @@
 % Security robots patrol a small museum. Incidents (events) occur at random at the targets and
 % last a short while; a robot at a target detects the incidents in progress there. Four small
 % classes in this folder define the problem, each a subclass of a simulator base class:
-%   EventTarget < Target          events occur at random and expire (the target dynamics)
+%   SimpleTarget < Target          events occur at random and expire (the target dynamics)
 %   SimpleAgent < Agent           moves at its top speed along its path (the agent model)
-%   ChaseEventsPolicy < Policy    goes to the neighbor with the most events (the policy)
-%   MissedEvents < Metric         share of the events missed (the performance metric)
+%   SimplePolicy < Policy    goes to the neighbor with the most events (the policy)
+%   SimpleMetric < Metric         share of the events missed (the performance metric)
 % One line each in Components/ComponentRegistry.m lists them in the GUI's dropdowns and in
 % runTrial. Run this script section by section (Ctrl+Enter) and watch the GUI: each section
 % does what the clicks named in its title do. Every step saves the canvas to
@@ -52,10 +52,10 @@ end
 snapshot(ui, outDir, "4_edges");
 
 %% 5. Choose the new classes and place three robots (dropdowns; "Add Agent", click targets)
-choose(ui.targetTypeDropdown, 'Event Target (example)');
+choose(ui.targetTypeDropdown, 'Simple Target (example)');
 choose(ui.agentTypeDropdown, 'Simple Agent (example)');
-choose(ui.policyDropdown, 'Chase Events (example)');
-choose(ui.objectiveDropdown, 'Missed Events (example)');
+choose(ui.policyDropdown, 'Simple Policy (example)');
+choose(ui.objectiveDropdown, 'Simple Metric (example)');
 enter(ui.speedField, 4);                          % slow indoor robots
 press(ui, 'Add Agent');
 for k = [9 1 4]
@@ -76,14 +76,14 @@ fprintf('Events missed: %.1f %%\n', 100 * ui.model.metrics{1}.value(ui.model, 60
 %% 7. Save the scenario ("Save Layout...") and compare policies without the GUI (runTrial)
 file = fullfile(outDir, 'MyMuseum.mat');
 ui.saveLayout(file);
-policies = ["Chase Events (example)", "Random Walk"];
+policies = ["Simple Policy (example)", "Random Walk"];
 missed = zeros(numel(policies), 10);
 for i = 1:numel(policies)
     for seed = 1:10
         out = runTrial(struct('Layout', file, 'Policy', policies(i), 'AgentStarts', "layout", ...
             'AgentType', "Simple Agent (example)", 'AgentSpeed', 4, 'EndTime', 600, 'Seed', seed, ...
-            'Metrics', ["Missed Events (example)", "Average Uncertainty J(t)"]));
-        missed(i, seed) = out.metricValues.MissedEvents;
+            'Metrics', ["Simple Metric (example)", "Average Uncertainty J(t)"]));
+        missed(i, seed) = out.metricValues.SimpleMetric;
     end
     fprintf('%-24s misses %4.1f %% of the events (mean of 10 runs; std %.1f)\n', ...
         policies(i), 100 * mean(missed(i, :)), 100 * std(missed(i, :)));

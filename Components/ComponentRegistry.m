@@ -31,7 +31,7 @@ classdef ComponentRegistry < handle
             obj.policies('ED-ORHC-SO')        = @() EDRHCPolicy(Transit="SO");
             obj.policies('ED-ORHC-FO')        = @() EDRHCPolicy(Transit="FO");
             obj.policies('Battery-Aware ED-RHC') = @() BatteryAwareRHCPolicy();
-            obj.policies('Chase Events (example)') = @() ChaseEventsPolicy();
+            obj.policies('Simple Policy (example)') = @() SimplePolicy();
 
             % What each policy assumes of the agents' motion (a policy may also declare it as a
             % constant property agentAssumption; see assumptionOf)
@@ -49,11 +49,11 @@ classdef ComponentRegistry < handle
 
             obj.targetTypes = containers.Map('KeyType','char','ValueType','any');
             obj.targetTypes('Uncertainty Target')     = @(idx, pos) Target(idx, pos);
-            obj.targetTypes('Event Target (example)') = @(idx, pos) EventTarget(idx, pos);
+            obj.targetTypes('Simple Target (example)') = @(idx, pos) SimpleTarget(idx, pos);
 
             obj.metrics = containers.Map('KeyType','char','ValueType','any');
             obj.metrics('Average Uncertainty J(t)') = @() AverageUncertainty();
-            obj.metrics('Missed Events (example)')  = @() MissedEvents();
+            obj.metrics('Simple Metric (example)')  = @() SimpleMetric();
             obj.metrics('Minimum SOC')              = @() MinimumSOC();
 
             % Agent types before the consolidation of 2026-10-20, kept so older scripts and

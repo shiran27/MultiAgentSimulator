@@ -6,7 +6,7 @@ classdef (Abstract) Metric < handle
     % value of each (parameter Metrics, output metricValues).
     % A new metric implements value (and update, if it accumulates over the run), sets label,
     % and is registered in ComponentRegistry (metrics). AverageUncertainty is the default
-    % objective; Examples/EventDetection/MissedEvents.m is a small example.
+    % objective; Examples/EventDetection/SimpleMetric.m is a small example.
     properties
         label string = ""      % axis label of the objective plot
         plotMax = 10           % initial top of the objective plot's y-axis (grows with the data)
