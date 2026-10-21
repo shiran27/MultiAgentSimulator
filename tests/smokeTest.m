@@ -15,7 +15,8 @@ function smokeTest()
 %    speed and acceleration limits keep every agent within them.
 % 5. Agent types: the older type names still resolve (aliases); every type x speed profile runs;
 %    only agents at rest service targets; a physical agent arrives within a step or two of its
-%    planned time on a wall-routed edge, and keeps the transit times ED-RHC plans; the
+%    planned time on a wall-routed edge, and keeps the transit times ED-RHC plans; the energy
+%    model ED-ORHC plans with matches the energy a physical agent draws on a curved edge; the
 %    heading turns smoothly on curved paths; William's Joint RHC harness (runTrial defaults with
 %    'Linear Agent') runs.
 % 6. Scenarios (scenarioCatalog): each loads (with its background image, if any) and runs 10 s
@@ -201,6 +202,23 @@ try   % ED-RHC plans with the physical agents' own transit times, and they keep 
         'physical agents: %d transits, arrival - planned in [%.3f, %.3f] s'], numel(late), min(late), max(late)));
 catch err
     check(false, "ED-RHC physical transit times  ERROR " + err.message);
+end
+try   % the energy ED-ORHC plans with is the energy the agent draws
+    sim = reportScenario('Dijkstra Corners', {'Physical Agent'});
+    P = sim.findEdge(8, 2).curvePoints; y = sum(vecnorm(diff(P, 1, 1), 2, 2));
+    a = PhysicalAgent(1, P(1, :), 15);
+    rho = 1.5 * a.shortestTransit(P);
+    f = a.transitEnergyModel(P, y, "SO", Inf, Inf, [a.shortestTransit(P) 250]);
+    a.transitProfile = "SO"; a.transitTime = rho; a.path = P; t = 0;
+    while ~isempty(a.path) && t < 60, a.update(0.05); t = t + 0.05; end
+    cf = SpeedProfile.energy("SO", y, rho);
+    ab = AbstractAgent(1, P(1, :), 15);
+    g = ab.transitEnergyModel(P, y, "SO", Inf, Inf, [1 250]);
+    check(abs(f(rho) / a.Je - 1) < 0.02 && isequal(g([rho; 2 * rho]), SpeedProfile.energy("SO", y, [rho; 2 * rho])), ...
+        sprintf(['ED-ORHC energy model on edge 8-2 (SO, %.1f s): Physical Agent predicted %.1f, drawn %.1f ' ...
+        '(closed form %.1f); Abstract Agent = closed form'], rho, f(rho), a.Je, cf));
+catch err
+    check(false, "transit energy model  ERROR " + err.message);
 end
 try   % smooth heading on a curved path
     a = AbstractAgent(1, P(1, :), 15); a.path = P; ori = []; om = [];

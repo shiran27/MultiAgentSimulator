@@ -37,6 +37,10 @@ classdef EDRHCPolicy < Policy
     % that of the bounded minimum-energy profile (Apps. D-E, generalized to both limits; see
     % SpeedProfile), and rho is no shorter than the limits allow, nor than the agent's
     % shortestTransit (the shortest transit it can keep; 0 for an AbstractAgent).
+    % The energy E(rho) is the agent's own (Agent.transitEnergyModel): the closed form above
+    % for an AbstractAgent, which follows the profile exactly; for a PhysicalAgent, that of the
+    % reference it will follow (the planned profile where it fits, else its fastest one retimed),
+    % including the turns' acceleration v^2 kappa on curved paths.
     % When an agent leaves, the policy hands it the planned transit time rho_ij; the energy-
     % aware models also hand it their profile and limits. A AbstractAgent then follows the
     % plan exactly (with profile "constant" it is the first-order agent of the Automatica paper;
@@ -74,6 +78,7 @@ classdef EDRHCPolicy < Policy
     properties (Access = private)
         states               % agent index -> struct(stage, target, covered, hold)
         options              % fmincon options
+        energyModels         % cache: edge, agent and plan -> E(rho) (see energyOf)
     end
 
     properties (Constant)
@@ -95,6 +100,7 @@ classdef EDRHCPolicy < Policy
             obj.transit = opts.Transit;
             obj.states = containers.Map('KeyType', 'double', 'ValueType', 'any');
             obj.options = optimoptions('fmincon', 'Display', 'off', 'Algorithm', 'sqp');
+            obj.energyModels = containers.Map('KeyType', 'char', 'ValueType', 'any');
         end
 
         function resetReservations(obj)
@@ -178,6 +184,9 @@ classdef EDRHCPolicy < Policy
                 end
                 d = struct('R', R, 'A', A, 'B', B, 'j', k, 'rho', rho0, 'w', weights, ...
                     'y', y, 'vb', obj.speedLimit, 'ub', obj.accelLimit);
+                if obj.transit ~= "constant speed"   % the energy the agent draws, E(rho)
+                    d.E = obj.energyOf(agent, model, i, hood(k), pts, y, rhoRange);
+                end
                 [ac, bc] = obj.planConstraint(agent, model, i, hood(k), d, rhoRange);
                 for c = obj.cases(kind, d, uBi, rhoRange(1), ac, bc)
                     [cost, x, rho] = obj.solveCase(d, c, rhoRange);
@@ -465,9 +474,26 @@ classdef EDRHCPolicy < Policy
                     J = obj.planCost(d, Z * M' + c0);
                 else
                     r = Z(:, 3);
-                    J = obj.planCost(d, [Z * M' + c0, r]) + sum(d.w) / 2 * obj.energyWeight ...
-                        * SpeedProfile.energy(obj.transit, d.y, r, d.vb, d.ub);
+                    J = obj.planCost(d, [Z * M' + c0, r]) + sum(d.w) / 2 * obj.energyWeight * d.E(r);
                 end
+            end
+        end
+
+        function f = energyOf(obj, agent, model, i, j, pts, y, rhoRange)
+            % The agent's energy objective int |a|^2 dt for the transit i -> j as a function of
+            % rho (Agent.transitEnergyModel: the closed form E(y, rho) for an AbstractAgent; a
+            % PhysicalAgent's own reference, turns included), cached per edge, agent kind and plan
+            if norm(pts(1, :) - model.targets(i).position) > norm(pts(end, :) - model.targets(i).position)
+                pts = flipud(pts);                   % from i, as the agent will cross it
+            end
+            key = sprintf('%s|%d>%d|%d|%.10g|%.10g,%.10g|%s|%.10g|%.10g|%.10g|%.10g', ...
+                agent.energyModelKey(), i, j, size(pts, 1), y, pts(end, 1), pts(end, 2), ...
+                obj.transit, obj.speedLimit, obj.accelLimit, rhoRange(1), rhoRange(2));
+            if isKey(obj.energyModels, key)
+                f = obj.energyModels(key);
+            else
+                f = agent.transitEnergyModel(pts, y, obj.transit, obj.speedLimit, obj.accelLimit, rhoRange);
+                obj.energyModels(key) = f;
             end
         end
 

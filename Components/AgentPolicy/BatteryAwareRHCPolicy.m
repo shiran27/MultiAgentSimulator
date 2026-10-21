@@ -118,7 +118,7 @@ classdef BatteryAwareRHCPolicy < EDRHCPolicy
                 a = [Pi Pi Pi Pi 0];
                 b = budget - obj.edgeEnergy(agent, model, i, j, d.rho);
             else
-                Ja = SpeedProfile.energy(obj.transit, d.y, rhoRange(1), d.vb, d.ub);
+                Ja = d.E(rhoRange(1));                   % the agent's own E(rho), at its largest
                 a = [Pi Pi Pi Pi bat.movePower()];
                 b = budget - (bat.alphaVel * d.y + bat.gammaAcc * Ja) / bat.eta;
             end

@@ -62,19 +62,60 @@ classdef PhysicalAgent < Agent
             rho = P.rho;
         end
 
-        function Ja = accelEnergy(obj, pts, rho)
-            % int |a|^2 dt of the reference along pts taking rho (along the path and across it),
-            % sampled at 0.05 s as the agent follows it
+        function Ja = accelEnergy(obj, pts, rho, name, vb, ub)
+            % int |a|^2 dt of the reference along pts for a plan taking rho with profile name
+            % (default: the agent's own) and limits vb, ub (default none), along the path and
+            % across it, sampled as the agent follows it
+            if nargin < 4, name = obj.profile; end
+            if nargin < 6, vb = Inf; ub = Inf; end
             G = obj.geometry(pts);
-            P = obj.referenceProfile(G, SpeedProfile.shape(obj.profile, G.s(end), ...
-                max(rho, eps), Inf, Inf));
-            dt = 0.05;
-            t = [unique([0:dt:P.rho, P.rho]), P.rho, P.rho];        % then two steps at rest
-            p = zeros(numel(t), 2);
-            for k = 1:numel(t), p(k, :) = obj.curveAt(G, SpeedProfile.at(P, t(k))); end
-            v = [0 0; diff(p) / dt];
-            a = diff(v) / dt;
-            Ja = sum(sum(a.^2, 2)) * dt;
+            y = G.s(end);
+            rho = max([rho, SpeedProfile.minTransit(y, vb, ub), eps]);
+            Ja = obj.referenceEnergy(G, obj.referenceProfile(G, SpeedProfile.shape(name, y, rho, vb, ub)));
+        end
+
+        function f = transitEnergyModel(obj, pts, y, name, vb, ub, rhoRange)
+            % int |a|^2 dt of the reference this agent follows for a plan (profile name, limits
+            % vb, ub, transit time rho in rhoRange) along pts, as a function f(rho) (vectorized).
+            % Below the rho at which the planned profile fits the agent's limits on this path,
+            % the reference is the fastest profile retimed to rho; above it, the planned profile.
+            % Each part is tabulated on a few transit times and interpolated in log-log
+            % coordinates (exact for the rho^-3 law of a profile shape scaled in time), and
+            % extrapolated by that law beyond the last
+            G = obj.geometry(pts);
+            fast = obj.fastestProfile(G);
+            lo = max([rhoRange(1), fast.rho, SpeedProfile.minTransit(y, vb, ub), eps]);
+            hi = max(rhoRange(end), 1.01 * lo);
+            fits = @(r) name ~= "constant" && obj.keepsLimits(SpeedProfile.shape(name, y, r, vb, ub), G);
+            if fits(lo)
+                rs = lo;
+            elseif ~fits(hi)
+                rs = Inf;
+            else
+                a = lo; b = hi;                      % bisection (log scale) for the switch
+                for k = 1:14
+                    c = sqrt(a * b);
+                    if fits(c), b = c; else, a = c; end
+                end
+                rs = b;
+            end
+            r1 = []; E1 = [];
+            if rs > lo                               % the fastest profile, retimed
+                r1 = lo * (min(rs, hi) / lo) .^ linspace(0, 1, 4);
+                E1 = arrayfun(@(r) obj.referenceEnergy(G, SpeedProfile.retime(fast, r)), r1);
+            end
+            r2 = []; E2 = [];
+            if isfinite(rs)                          % the planned profile
+                r2 = rs * (min(max(hi, rs), 8 * rs) / rs) .^ linspace(0, 1, 6);
+                r2 = unique(r2);
+                E2 = arrayfun(@(r) obj.referenceEnergy(G, SpeedProfile.shape(name, y, r, vb, ub)), r2);
+            end
+            f = @(r) PhysicalAgent.tabulatedEnergy(r, rs, r1, E1, r2, E2);
+        end
+
+        function k = energyModelKey(obj)
+            k = sprintf("physical|%.10g|%.10g|%.10g|%.10g", obj.state.maxSpeed, obj.state.maxAccel, ...
+                obj.planMargin, obj.cornerRadius);
         end
 
         function update(obj, dt)
@@ -121,6 +162,29 @@ classdef PhysicalAgent < Agent
         end
     end
 
+    methods (Static, Access = private)
+        function E = tabulatedEnergy(r, rs, r1, E1, r2, E2)
+            % transitEnergyModel's interpolation: part 1 (fastest, retimed) below rs, part 2
+            % (planned) from rs; log-log linear inside each table, the rho^-3 law outside
+            E = zeros(size(r));
+            in1 = r < rs;
+            if any(in1), E(in1) = part(r(in1), r1, E1); end
+            if any(~in1), E(~in1) = part(r(~in1), r2, E2); end
+
+            function e = part(r, rg, Eg)
+                Eg = max(Eg, realmin);
+                if isscalar(rg)
+                    e = Eg * (rg ./ r).^3;
+                    return;
+                end
+                e = exp(interp1(log(rg), log(Eg), log(r), 'linear'));
+                below = r < rg(1); above = r > rg(end);
+                e(below) = Eg(1) * (rg(1) ./ r(below)).^3;
+                e(above) = Eg(end) * (rg(end) ./ r(above)).^3;
+            end
+        end
+    end
+
     methods (Access = private)
         function startLeg(obj)
             % The reference of the transit that starts now: from the start of the path (where
@@ -138,6 +202,19 @@ classdef PhysicalAgent < Agent
             obj.leg = struct('G', G, 'P', P, 'tau', 0, 'p', G.pts(1, :), 'v', [0 0]);
             obj.legTime = P.rho;
             obj.holdPoint = [];
+        end
+
+        function Ja = referenceEnergy(obj, G, P)
+            % int |a|^2 dt of the reference (path G, profile P) as the agent follows it: the
+            % step velocities and their changes, as in update (0.05 s steps; coarser for very
+            % long transits)
+            dt = max(0.05, P.rho / 2000);
+            t = [unique([0:dt:P.rho, P.rho]), P.rho, P.rho];        % then two steps at rest
+            p = zeros(numel(t), 2);
+            for k = 1:numel(t), p(k, :) = obj.curveAt(G, SpeedProfile.at(P, t(k))); end
+            v = [0 0; diff(p) / dt];
+            a = diff(v) / dt;
+            Ja = sum(sum(a.^2, 2)) * dt;
         end
 
         function P = referenceProfile(obj, G, P)

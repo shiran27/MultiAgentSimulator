@@ -142,12 +142,29 @@ classdef (Abstract) Agent < handle & matlab.mixin.Heterogeneous
             E = obj.battery.transitEnergy(rho, y, obj.accelEnergy(pts, rho));
         end
 
-        function Ja = accelEnergy(obj, pts, rho)
-            % int |a|^2 dt of a transit along pts taking rho with the agent's own profile (0 for
-            % "constant", whose jumps in speed draw no modeled power)
+        function Ja = accelEnergy(obj, pts, rho, name, vb, ub)
+            % int |a|^2 dt of a transit along pts taking rho with profile name (default: the
+            % agent's own) and limits vb, ub (default none); 0 for "constant", whose jumps in
+            % speed draw no modeled power
+            if nargin < 4, name = obj.profile; end
+            if nargin < 6, vb = Inf; ub = Inf; end
             y = sum(vecnorm(diff(pts, 1, 1), 2, 2));
-            Ja = SpeedProfile.energy(obj.profile, y, rho);
+            Ja = SpeedProfile.energy(name, y, rho, vb, ub);
             if ~isfinite(Ja), Ja = 0; end
+        end
+
+        function f = transitEnergyModel(~, ~, y, name, vb, ub, ~)
+            % The energy objective int |a|^2 dt of a planned transit, as a function f(rho)
+            % (vectorized) for a path of length y crossed with profile name and limits vb, ub
+            % (args: pts, y, name, vb, ub, rhoRange). An idealized agent follows the profile
+            % exactly along the arc length, so this is SpeedProfile.energy, the closed form of
+            % the energy-aware RHC paper; PhysicalAgent adds its turns and its own profile
+            f = @(rho) SpeedProfile.energy(name, y, rho, vb, ub);
+        end
+
+        function k = energyModelKey(~)
+            % What transitEnergyModel depends on besides the path and the plan (for caching)
+            k = "closed form";
         end
 
         function calculate_energy(obj, dt)

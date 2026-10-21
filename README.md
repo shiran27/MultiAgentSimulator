@@ -231,6 +231,13 @@ Agents may share targets. During a spike that the agents present cannot overcome
   - The RHCP never plans a transit shorter than the limits allow: `y/v + v/u`, or `2 sqrt(y/u)` on short edges.
   - These profiles generalize the paper's Apps. D-E to both limits at once. The speed-limited SO keeps `u` continuous, which uses 2-6% less energy than the paper's SO-V profile.
 - **Agents.** The Abstract Agent follows each planned transit exactly and accumulates `J_e` exactly. Under `ED-RHC` it runs each fixed transit `y/maxSpeed` with its own profile (`"SO"`: the JS simulator's SO#). The Physical Agent tracks the same plans with feedback.
+- **The energy each agent draws.** The RHCP's `E(rho)` comes from the agent (`Agent.transitEnergyModel`):
+  - For the Abstract Agent it is the closed form above (results unchanged).
+  - For the Physical Agent it is the `int |a|^2 dt` of the reference that agent will follow. That reference is the planned SO/FO profile where the profile fits the agent's limits on the path, and otherwise its fastest profile retimed to `rho`. The energy includes the turns' `v^2 kappa` on curved paths.
+  - The model is tabulated on a few transit times per edge, interpolated in log-log coordinates, and cached by the policy.
+  - On a curved edge of the lab (8-2), the closed form misses the drawn energy by about 85%, while the agent's model is within 0.4%.
+  - Over 500 s on the lab (5 Physical Agents), planned and drawn `J_e` agree within 1% (closed form: 18% mean error for SO, 13% for FO).
+  - The RHCPs now see what turns cost, so the energy drawn falls by 29% (SO) and 24% (FO). `J` rises by 3.6% and 3.2%, and `runTrial`'s `J_T` falls by 27% and 23%.
 - **Metrics.** `runTrial` also returns `out.Je`, `out.JT`, `out.vmax` and `out.umax` (paper eqs. 3 and 73), and `out.log.Je` holds the per-step energy.
 - **`clearFirst`** (default `false`, which follows the paper). Set it to `true` for the JS simulator's energy-aware convention: every visit clears the target, there is no RHCP1 on arrival, and plans only include visits that clear `j`.
 
