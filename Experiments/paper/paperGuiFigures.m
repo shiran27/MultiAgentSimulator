@@ -93,7 +93,6 @@ end
 function ui = openReference(root, opts)
 % Reference scenario over the Stevens Smart Lab map, components as in Sec. IV
 ui = MainUI('Monitor', opts.Monitor);
-ui.renderer.loadBackgroundImage(fullfile(root, 'LabLayout.png'));
 ui.loadLayout(fullfile(root, 'Configurations', 'ReportLayout.mat'));
 choose(ui.policyDropdown, 'Battery Efficient');
 end

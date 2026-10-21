@@ -49,12 +49,13 @@ The **Scenario** dropdown (top of the Tools panel; `MainUI.loadScenario(name)` i
 | Scenario | Layout | What it is |
 |---|---|---|
 | Lab floor (Stevens) | `ReportLayout.mat` | Stevens lab floor plan; 11 targets, 5 agents; the simulator paper's reference scenario |
-| City blocks | `CityBlocks.mat` | Street grid: eight city blocks (obstacles) around a park (open), a river promenade; 11 sites, 4 agents |
+| Office floor | `OfficeFloor.mat` | One floor of an office and lab building: eight rooms with doors (gaps in the walls), a hall and a lobby; 14 targets in rooms and halls, 3 robots |
+| City patrol | `CityPatrol.mat` | Police patrol on a street grid: 16 intersections and 5 sites (police HQ, bank, school, mall, hospital); every edge runs along a road, so the 4 patrol cars stay on the roads; the nine blocks are obstacles |
 | Harbor patrol | `HarborPatrol.mat` | Coast with a port, piers and a breakwater, two islands; 12 buoys and berths, 3 boats |
 | Campus | `Campus.mat` | Zoomed-out building complex: six buildings and a pond (obstacles), quad, parking; 11 sites, 5 agents |
 | JS: ... | `Legacy/JS_*.mat` | The eight presets of the legacy JS simulator (RHC papers), scaled to the canvas |
 
-`Configurations/scenarioCatalog.m` lists them. `Configurations/makeScenarioLayouts.m` draws the maps (`Configurations/backgrounds/*.png`) and writes their layouts from the same geometry, so walls line up with the drawn buildings, coasts and piers. Edit it to change a scenario, or add a row to the catalog for a new layout file.
+`Configurations/scenarioCatalog.m` lists them. `Configurations/makeScenarioLayouts.m` draws the maps (`Configurations/backgrounds/*.png`) and writes their layouts from the same geometry, so walls line up with the drawn walls, buildings, coasts and piers. It also restyles the lab floor plan (`LabLayout.png`) in the same palette as `backgrounds/LabFloor.png`. Edit it to change a scenario, or add a row to the catalog for a new layout file.
 
 ## Target uncertainty and defaults
 
@@ -92,7 +93,7 @@ The experiment harness (`Experiments/runTrial`, `Experiments/trialDefaults.m`) s
 
 Only `targets` and `edges` are required, so files saved by older versions still load: missing fields keep the defaults above (agents take the GUI's Agent Accel and Speed Profile) and no agents are placed. Loaded agents use the Agent Type selected in the dropdown. `runTrial` ignores stored agents and places its own from the `AgentStarts` parameter.
 
-`Configurations/ReportLayout.mat` is the reference scenario of the simulator paper (Stevens Smart Lab, background `LabLayout.png`): 11 targets, 10 edges, 3 walls, and 5 agents at speed 15 starting on targets **1, 6, 2, 3, 5** (agent 1 on target 1, agent 2 on target 6, and so on), in `Static Uniform` mode with `A = 1`, `B = 10`, `R(0) = 0`.
+`Configurations/ReportLayout.mat` is the reference scenario of the simulator paper (Stevens Smart Lab, background `LabFloor.png`, a recolored `LabLayout.png`): 11 targets, 10 edges, 3 walls, and 5 agents at speed 15 starting on targets **1, 6, 2, 3, 5** (agent 1 on target 1, agent 2 on target 6, and so on), in `Static Uniform` mode with `A = 1`, `B = 10`, `R(0) = 0`.
 
 ## Smoke test
 

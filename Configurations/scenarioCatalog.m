@@ -7,7 +7,8 @@ function T = scenarioCatalog()
 here = fileparts(mfilename('fullpath'));
 rows = {
     "Lab floor (Stevens)", "ReportLayout.mat",  "Stevens lab floor plan: 11 targets, 5 agents (the simulator paper's reference scenario)."
-    "City blocks",         "CityBlocks.mat",    "Street grid with eight city blocks and a park: 11 sites, 4 agents."
+    "Office floor",        "OfficeFloor.mat",   "Office and lab building floor: 8 rooms with doors, halls and a lobby: 14 targets, 3 robots."
+    "City patrol",         "CityPatrol.mat",    "Police patrol on a street grid: 16 intersections and 5 sites, 4 patrol cars on the roads."
     "Harbor patrol",       "HarborPatrol.mat",  "Harbor, piers, breakwater and two islands: 12 buoys and berths, 3 boats."
     "Campus",              "Campus.mat",        "Building complex with a pond, quad and parking: 11 sites, 5 agents."
     "JS: 1 agent, 3 targets",  "Legacy/JS_1Agent_3T.mat",      "Preset of the legacy JS simulator (RHC papers), scaled to the canvas."

@@ -4,11 +4,12 @@ function makeScenarioLayouts()
 % whose walls come from the same geometry as the picture, so they line up exactly. Run it again
 % after editing a scenario:
 %   matlab -batch "addpath(genpath(pwd)); makeScenarioLayouts"
-% Also records the lab floor plan as the background of ReportLayout.mat.
+% Also restyles the lab floor plan (LabLayout.png -> backgrounds/LabFloor.png) and records it as
+% the background of ReportLayout.mat.
 here = fileparts(mfilename('fullpath'));
 bgDir = fullfile(here, 'backgrounds');
 if ~isfolder(bgDir), mkdir(bgDir); end
-makers = {@cityBlocks, @harborPatrol, @campus};
+makers = {@cityPatrol, @officeFloor, @harborPatrol, @campus};
 for k = 1:numel(makers)
     [name, s, drawFcn] = makers{k}();
     s.background = name + ".png";
@@ -17,76 +18,256 @@ for k = 1:numel(makers)
     fprintf('%s: %d targets, %d edges, %d walls, %d agents\n', name, size(s.targets, 1), ...
         size(s.edges, 1), size(s.walls, 1), numel(s.agentStarts));
 end
+restyleLabFloor(fullfile(fileparts(here), 'LabLayout.png'), fullfile(bgDir, 'LabFloor.png'));
 tmp = load(fullfile(here, 'ReportLayout.mat'), 's');
 s = tmp.s;
-s.background = "LabLayout.png";
+s.background = "LabFloor.png";
 save(fullfile(here, 'ReportLayout.mat'), 's');
 end
 
+function restyleLabFloor(src, dst)
+% The Stevens lab floor plan (LabLayout.png) recolored in the palette of the other maps, with
+% its geometry and labels unchanged: a warm floor, light slate benches and door leaves, slate
+% walls, and a green exterior around the building
+I = im2double(imread(src)); I = I(:, :, 1:3);
+g = mean(I, 3); sat = max(I, [], 3) - min(I, [], 3);
+green = I(:, :, 2) - I(:, :, 1) > 0.12;
+floorM = g >= 0.90 & ~green;
+dark = g < 0.42 & ~green;                                  % outlines and text
+wallM = ~floorM & ~dark & ~green & sat < 0.10 & g < 0.75;
+light = ~floorM & ~dark & ~green & ~wallM;
+setc = @(O, M, c) O .* ~M + reshape(c, 1, 1, 3) .* M;
+L = bwlabel(floorM, 4);
+area = accumarray(L(L > 0), 1);
+[~, open] = max(area);                                     % the open lab floor (and outside)
+rows = find(sum(wallM, 2) > 50); cols = find(sum(wallM, 1) > 50);   % the building's extent
+inside = false(size(g)); inside(rows(1):rows(end), cols(1):cols(end)) = true;
+out = setc(zeros(size(I)), floorM, [0.85 0.88 0.91]);     % enclosed floor: benches, door leaves
+out = setc(out, L == open & inside, [0.965 0.953 0.925]);
+out = setc(out, L == open & ~inside, [0.85 0.88 0.82]);
+out = setc(out, wallM, [0.37 0.42 0.48]);
+out = setc(out, light, [0.80 0.82 0.85]);
+out = setc(out, green, [0.49 0.72 0.55]);
+out = setc(out, dark, [0.20 0.23 0.27]);
+imwrite(out, dst);
+end
+
 %% ---------------------------------------------------------------------------------------------
-function [name, s, draw] = cityBlocks()
-% Street grid with eight city blocks (obstacles) around a park (open), a river promenade on top
-name = "CityBlocks";
-X = [6 33 60 87]; Y = [6 31 56 81]; half = 3;            % street centerlines, half width
-bx = [X(1:3) + half; X(2:4) - half]';                      % block x ranges (3 x 2)
-by = [Y(1:3) + half; Y(2:4) - half]';
-park = [2 2];                                              % block (column, row) that is a park
+function [name, s, draw] = cityPatrol()
+% Police patrol in a street grid: patrol cars drive the roads (every edge runs along a road
+% centerline, so routes stay on the roads) between intersections and five sites; the nine
+% city blocks, the park included, are obstacles
+name = "CityPatrol";
+R = [8 36 64 92]; half = 4;                                % road centerlines (x and y), half width
+blk = [R(1:3) + half; R(2:4) - half]';                     % block ranges (3 x 2), same in x and y
 walls = zeros(0, 4);
 for i = 1:3
     for j = 1:3
-        if isequal([i j], park), continue; end
-        walls = [walls; rectWalls(bx(i, 1), by(j, 1), bx(i, 2), by(j, 2))]; %#ok<AGROW>
+        walls = [walls; rectWalls(blk(i, 1), blk(j, 1), blk(i, 2), blk(j, 2))]; %#ok<AGROW>
     end
 end
-targets = [6 6; 46.5 6; 87 6; 19.5 31; 46.5 43.5; 73.5 56; 6 56; 33 81; 46.5 86; 87 81; 87 31];
-names = ["Station", "Market", "Depot", "School", "Park", "Hospital", "Library", "Plaza", ...
-    "Pier", "Stadium", "Clinic"];
-edges = [1 2; 1 4; 2 3; 2 5; 3 11; 4 5; 4 7; 5 6; 5 8; 6 11; 6 10; 7 8; 8 9; 9 10];
-A = ones(numel(names), 1); A(names == "Hospital") = 2; A(names == "Market") = 1.5;
-s = layout(targets, edges, walls, [1 3 7 10], 15, A);
+[gx, gy] = meshgrid(R, R);
+targets = [gx(:), gy(:)];                                  % 16 intersections
+sites = [22 8; 50 36; 22 64; 64 78; 92 50];
+targets = [targets; sites];                               % Police HQ, Bank, School, Mall, Hospital
+edges = zeros(0, 2);                                       % consecutive points along each road
+for r = R
+    for dim = 1:2
+        on = find(abs(targets(:, dim) - r) < 1e-9);
+        [~, order] = sort(targets(on, 3 - dim));
+        on = on(order);
+        edges = [edges; on(1:end-1), on(2:end)]; %#ok<AGROW>
+    end
+end
+A = ones(size(targets, 1), 1); A(17:end) = [1 2 1.5 2 2.5];   % sites need more frequent patrols
+% site buildings: block (i, j), the two lots they take (1 SW, 2 SE, 3 NW, 4 NE), roof, name
+poiDefs = {1 1 [1 2] [0.36 0.53 0.83] 'POLICE HQ'; 2 1 [3 4] [0.55 0.62 0.70] 'BANK'
+           1 3 [1 2] [0.98 0.80 0.35] 'SCHOOL';   3 3 [1 3] [0.86 0.66 0.74] 'MALL'
+           3 2 [2 4] [0.97 0.97 0.97] ''};
+hq = 17;
+s = layout(targets, edges, walls, [hq, find(targets(:, 1) == 8 & targets(:, 2) == 64), ...
+    find(targets(:, 1) == 64 & targets(:, 2) == 36), find(targets(:, 1) == 92 & targets(:, 2) == 92)], 15, A);
 draw = @drawCity;
 
     function drawCity(ax)
-        land = [0.949 0.937 0.914]; street = [1 1 1]; avenue = [0.992 0.886 0.576];
-        edgeGray = [0.82 0.80 0.76]; bldg = [0.902 0.890 0.863]; bldgEdge = [0.78 0.75 0.70];
+        land = [0.949 0.937 0.914]; road = [1 1 1]; roadEdge = [0.80 0.80 0.80];
+        avenue = [0.992 0.886 0.576]; avenueEdge = [0.93 0.76 0.35]; walk = [0.91 0.89 0.85];
         fill(ax, [0 100 100 0], [0 0 100 100], land, 'EdgeColor', 'none');
-        fill(ax, [0 100 100 0], [88 88 100 100], [0.667 0.855 1], 'EdgeColor', 'none');   % river
-        for w = 89.5:2.5:99, plot(ax, [0 100], [w w], 'Color', [0.78 0.91 1], 'LineWidth', 0.8); end
-        fill(ax, [0 100 100 0], [84 84 88 88], [0.97 0.95 0.90], 'EdgeColor', edgeGray);  % promenade
-        for x = X                                                       % streets
-            c = street; if x == 60, c = avenue; end
-            fill(ax, x + [-half half half -half], [0 0 84 84], c, 'EdgeColor', edgeGray);
+        isAve = @(r, dim) (dim == 1 && r == 64) || (dim == 2 && r == 36);    % Central Ave, Main St
+        for dim = 1:2                                                   % road surfaces
+            for r = R
+                if isAve(r, dim), c = avenue; e = avenueEdge; else, c = road; e = roadEdge; end
+                if dim == 1, fill(ax, r + [-half half half -half], [0 0 100 100], c, 'EdgeColor', e);
+                else, fill(ax, [0 100 100 0], r + [-half -half half half], c, 'EdgeColor', e); end
+            end
         end
-        for y = Y
-            fill(ax, [0 100 100 0], y + [-half -half half half], street, 'EdgeColor', edgeGray);
+        for r = R                                                       % junction boxes on top
+            for q = R
+                c = road; if r == 64 || q == 36, c = avenue; end
+                fill(ax, r + [-half half half -half], q + [-half -half half half], c, 'EdgeColor', 'none');
+            end
         end
-        fill(ax, 60 + [-half half half -half], [0 0 84 84], avenue, 'EdgeColor', 'none'); % avenue on top
-        for y = Y, plot(ax, [60 - half 60 + half], [y y], 'Color', avenue, 'LineWidth', 5); end
-        for i = 1:3                                                     % blocks
-            for j = 1:3
-                x0 = bx(i, 1); x1 = bx(i, 2); y0 = by(j, 1); y1 = by(j, 2);
-                if isequal([i j], park)
-                    rectangle(ax, 'Position', [x0 y0 x1-x0 y1-y0], 'FaceColor', [0.776 0.902 0.765], ...
-                        'EdgeColor', [0.62 0.80 0.60], 'Curvature', 0.05);
-                    plot(ax, [x0 x1], [y0 y1], 'Color', [0.95 0.93 0.86], 'LineWidth', 2);
-                    plot(ax, [x0 x1], [y1 y0], 'Color', [0.95 0.93 0.86], 'LineWidth', 2);
-                    rectangle(ax, 'Position', [44 39 7 5], 'Curvature', 1, 'FaceColor', [0.667 0.855 1], 'EdgeColor', 'none');
-                    tree(ax, [39 37; 54 37; 39 50; 54 50; 42 45; 52 41]);
-                    continue;
-                end
-                rectangle(ax, 'Position', [x0 y0 x1-x0 y1-y0], 'FaceColor', [0.93 0.92 0.89], 'EdgeColor', bldgEdge);
-                xm = (x0 + x1) / 2; ym = (y0 + y1) / 2; g = 0.8;         % four buildings per block
-                for q = [x0 y0 xm y0; xm y0 x1 y0; x0 ym xm ym; xm ym x1 ym]'
-                    rectangle(ax, 'Position', [q(1)+g q(2)+g (xm-x0)-2*g (ym-y0)-2*g], ...
-                        'FaceColor', bldg, 'EdgeColor', bldgEdge);
+        for dim = 1:2                                                   % lane markings
+            for r = R
+                for k = 1:3
+                    span = [blk(k, 1) blk(k, 2)];
+                    col = [1 1 1] * 0.82; if isAve(r, dim), col = [1 1 1]; end
+                    if dim == 1, plot(ax, [r r], span, '--', 'Color', col, 'LineWidth', 1.2);
+                    else, plot(ax, span, [r r], '--', 'Color', col, 'LineWidth', 1.2); end
                 end
             end
         end
-        rectangle(ax, 'Position', [68.6 47.2 4 4], 'FaceColor', [0.85 0.2 0.2], 'EdgeColor', 'none');   % hospital
-        plot(ax, [70.6 70.6], [47.8 50.6], 'w', 'LineWidth', 3); plot(ax, [69.2 72], [49.2 49.2], 'w', 'LineWidth', 3);
-        label(ax, 60, 16, 'Central Ave', 90); label(ax, 47, 31, 'Elm St', 0); label(ax, 20, 56, 'Oak St', 0);
-        label(ax, 46.5, 52, 'City Park', 0); label(ax, 76, 92.5, 'River', 0, [0.25 0.45 0.7]);
+        for r = R                                                       % crosswalks
+            for q = R
+                for d = [-1 1]
+                    for k = -3:1.5:3
+                        col = [1 1 1] * 0.84; if r == 64, col = [1 1 1]; end
+                        rectangle(ax, 'Position', [r + k - 0.35, q + d * (half + 1) - 0.8, 0.7, 1.6], ...
+                            'FaceColor', col, 'EdgeColor', 'none');
+                        col = [1 1 1] * 0.84; if q == 36, col = [1 1 1]; end
+                        rectangle(ax, 'Position', [r + d * (half + 1) - 0.8, q + k - 0.35, 1.6, 0.7], ...
+                            'FaceColor', col, 'EdgeColor', 'none');
+                    end
+                end
+            end
+        end
+        roofs = [0.886 0.871 0.843; 0.843 0.824 0.788; 0.910 0.894 0.863; 0.871 0.847 0.812];
+        for i = 1:3                                                     % blocks: sidewalk, buildings
+            for j = 1:3
+                x0 = blk(i, 1); x1 = blk(i, 2); y0 = blk(j, 1); y1 = blk(j, 2);
+                rectangle(ax, 'Position', [x0 y0 x1-x0 y1-y0], 'FaceColor', walk, 'EdgeColor', [0.78 0.76 0.72]);
+                if i == 2 && j == 2                                     % park
+                    rectangle(ax, 'Position', [x0+1 y0+1 x1-x0-2 y1-y0-2], 'FaceColor', [0.776 0.902 0.765], 'EdgeColor', 'none');
+                    plot(ax, [x0+1 x1-1], [y0+1 y1-1], 'Color', [0.95 0.93 0.86], 'LineWidth', 2);
+                    plot(ax, [x0+1 x1-1], [y1-1 y0+1], 'Color', [0.95 0.93 0.86], 'LineWidth', 2);
+                    rectangle(ax, 'Position', [46 47 8 6], 'Curvature', 1, 'FaceColor', [0.667 0.855 1], 'EdgeColor', 'none');
+                    tree(ax, [43 43; 57 43; 43 57; 57 57; 50 43.5; 50 56.5]);
+                    label(ax, 50, 51.5 - 6.5, 'City Park', 0);
+                    continue;
+                end
+                lots = [0 0 0.48 0.48; 0.52 0 1 0.48; 0 0.52 0.48 1; 0.52 0.52 1 1];
+                lot = @(q) lots(q, :) .* [x1-x0-2 y1-y0-2 x1-x0-2 y1-y0-2] + [x0+1 y0+1 x0+1 y0+1];
+                site = find([poiDefs{:, 1}] == i & [poiDefs{:, 2}] == j);
+                taken = [];
+                if ~isempty(site)
+                    taken = poiDefs{site, 3};
+                    Ls = [lot(taken(1)); lot(taken(2))];
+                    box = [min(Ls(:, 1:2)), max(Ls(:, 3:4)) - min(Ls(:, 1:2))];
+                    poi(ax, box, poiDefs{site, 4}, poiDefs{site, 5});
+                end
+                for q = setdiff(1:4, taken)
+                    L = lot(q);
+                    c = roofs(mod(i + 2*j + q, 4) + 1, :);
+                    rectangle(ax, 'Position', [L(1)+0.5 L(2)-0.5 L(3)-L(1) L(4)-L(2)], 'FaceColor', c * 0.88, 'EdgeColor', 'none');
+                    rectangle(ax, 'Position', [L(1) L(2) L(3)-L(1) L(4)-L(2)], 'FaceColor', c, 'EdgeColor', c * 0.85);
+                end
+            end
+        end
+        rectangle(ax, 'Position', [80.5 50.5 3 3], 'FaceColor', [0.85 0.2 0.2], 'EdgeColor', 'none');   % hospital cross
+        plot(ax, [82 82], [50.9 53.1], 'w', 'LineWidth', 3); plot(ax, [80.9 83.1], [52 52], 'w', 'LineWidth', 3);
+        label(ax, 82, 46, 'HOSPITAL', 90, [0.7 0.15 0.15]);
+        label(ax, 64, 17.5, 'Central Ave', 90); label(ax, 81, 36, 'Main St', 0);
+        label(ax, 22, 92, 'North St', 0); label(ax, 8, 78, 'West St', 90);
     end
+end
+
+function poi(ax, box, color, txt)
+% A site building: roof of the given color with its name
+rectangle(ax, 'Position', box + [0.6 -0.6 0 0], 'FaceColor', color * 0.8, 'EdgeColor', 'none');
+rectangle(ax, 'Position', box, 'FaceColor', color, 'EdgeColor', color * 0.7, 'LineWidth', 1.2);
+if txt ~= "", label(ax, box(1) + box(3)/2, box(2) + box(4)/2, txt, 0, [1 1 1] * 0.2); end
+end
+
+%% ---------------------------------------------------------------------------------------------
+function [name, s, draw] = officeFloor()
+% One floor of an office and lab building: a T of corridors from the lobby, eight rooms with
+% doors (gaps in the walls); a security robot patrols rooms and halls
+name = "OfficeFloor";
+door = 4;                                                  % half width of a door gap
+gapped = @(x0, x1, y, gaps) hWallGaps(x0, x1, y, gaps, door);
+walls = [gapped(4, 96, 4, 50)                              % outer walls, lobby entrance
+         4 4 4 96; 96 4 96 96; 4 96 96 96
+         gapped(4, 96, 56, [15 38 62 85])                  % north rooms' doors on the hall
+         26 56 26 96; 74 56 74 96
+         vWallGaps(50, 56, 96, 76, door)                   % Office 2 | Lab, inner door
+         gapped(4, 44, 44, 15); gapped(56, 96, 44, 85)     % south rooms' doors on the hall
+         4 24 44 24; gapped(56, 96, 24, 76)                % Lab A | Lab B; Meeting | Server door
+         vWallGaps(44, 4, 44, 14, door); vWallGaps(56, 4, 44, 14, door)];   % lobby corridor walls
+targets = [15 76; 38 76; 62 76; 85 76; 15 34; 24 14; 85 34; 76 20; ...
+           15 50; 38 50; 50 50; 62 50; 85 50; 50 14];
+names = ["Office 1", "Office 2", "Lab", "Lounge", "Lab A", "Lab B", "Meeting", "Server", ...
+         "H1", "H2", "H3", "H4", "H5", "Lobby"];
+edges = [9 10; 10 11; 11 12; 12 13; 1 9; 2 10; 3 12; 4 13; 5 9; 7 13; 6 14; 8 14; 14 11; 2 3; 7 8];
+A = ones(numel(names), 1); A(names == "Server") = 2; A(names == "Lab" | names == "Lab A") = 1.5;
+s = layout(targets, edges, walls, [14 9 13], 15, A);
+draw = @drawOffice;
+
+    function drawOffice(ax)
+        outside = [0.85 0.88 0.82]; hall = [0.965 0.953 0.925]; wallC = [0.30 0.34 0.40];
+        tints = {[0.90 0.94 0.98], [0.92 0.96 0.89], [0.98 0.94 0.89], [0.95 0.93 0.97]};
+        fill(ax, [0 100 100 0], [0 0 100 100], outside, 'EdgeColor', 'none');
+        fill(ax, [4 96 96 4], [4 4 96 96], hall, 'EdgeColor', 'none');
+        rooms = [4 56 26 96; 26 56 50 96; 50 56 74 96; 74 56 96 96; 4 24 44 44; 4 4 44 24; 56 24 96 44; 56 4 96 24];
+        for k = 1:size(rooms, 1)
+            r = rooms(k, :);
+            fill(ax, r([1 3 3 1]), r([2 2 4 4]), tints{mod(k - 1, 4) + 1}, 'EdgeColor', 'none');
+        end
+        for x = 6:4:94, plot(ax, [x x], [44.5 55.5], 'Color', [0.92 0.90 0.86], 'LineWidth', 0.5); end   % hall tiles
+        for x = [7 16], desk(ax, [x 84 7 4]); desk(ax, [x 66 7 4]); end                     % Office 1
+        for x = [30 41], desk(ax, [x 84 7 4]); desk(ax, [x 66 7 4]); end                    % Office 2
+        for y = [64 72 80 88], bench(ax, [55 y 8 2.5]); bench(ax, [64.5 y 8 2.5]); end         % Lab benches
+        rectangle(ax, 'Position', [78 84 14 6], 'Curvature', 0.6, 'FaceColor', [0.80 0.70 0.86], 'EdgeColor', [0.6 0.5 0.66]);  % sofa
+        rectangle(ax, 'Position', [79 62 10 6], 'Curvature', 1, 'FaceColor', [0.86 0.78 0.66], 'EdgeColor', [0.66 0.58 0.46]);  % coffee table
+        tree(ax, [92 60; 92 92]);
+        for y = [28 36], bench(ax, [8 y 30 3]); end                                          % Lab A
+        for y = [8 18], bench(ax, [8 y 14 3]); end                                           % Lab B
+        rectangle(ax, 'Position', [62 28 18 8], 'Curvature', 1, 'FaceColor', [0.86 0.78 0.66], 'EdgeColor', [0.66 0.58 0.46]); % meeting table
+        for x = 62:5:87, rectangle(ax, 'Position', [x 6 3 9], 'FaceColor', [0.25 0.27 0.30], 'EdgeColor', [0.15 0.15 0.15]); end % racks
+        rectangle(ax, 'Position', [52.5 26 2.5 9], 'Curvature', 0.5, 'FaceColor', [0.86 0.78 0.66], 'EdgeColor', [0.66 0.58 0.46]);  % reception
+        fill(ax, [45 55 55 45], [0.5 0.5 4 4], [0.70 0.66 0.60], 'EdgeColor', 'none');      % entrance mat
+        for k = 1:size(walls, 1)
+            w = walls(k, :);
+            plot(ax, w([1 3]), w([2 4]), 'Color', wallC, 'LineWidth', 5);
+        end
+        doors = [15 56 0 1; 38 56 0 1; 62 56 0 1; 85 56 0 1; 15 44 0 -1; 85 44 0 -1; 76 24 0 -1
+                 50 76 1 0; 44 14 -1 0; 56 14 1 0];                    % door center, into the room
+        th = linspace(0, pi/2, 20);
+        for k = 1:size(doors, 1)                                       % door leaves and swings
+            c = doors(k, 1:2); n = doors(k, 3:4); t = [n(2) -n(1)];    % normal into the room, along the wall
+            for side = [-1 1]                                          % double doors
+                hinge = c + side * door * t; tip = hinge + door * n;
+                arc = hinge + door * (-side * cos(th') * t + sin(th') * n);
+                plot(ax, [hinge(1) tip(1)], [hinge(2) tip(2)], 'Color', [0.55 0.55 0.55], 'LineWidth', 1.2);
+                plot(ax, arc(:, 1), arc(:, 2), ':', 'Color', [0.55 0.55 0.55], 'LineWidth', 1);
+            end
+        end
+        names2 = ["Office 1", "Office 2", "Lab", "Lounge", "Lab A", "Lab B", "Meeting", "Server room"];
+        cen = [15 92.5; 38 92.5; 62 92.5; 85 92.5; 26 41; 32 21; 76 41; 88 21];
+        for k = 1:numel(names2), label(ax, cen(k, 1), cen(k, 2), char(names2(k)), 0); end
+        label(ax, 50, 30, 'Lobby', 0); label(ax, 20, 50, 'Hall', 0);
+    end
+end
+
+function desk(ax, box)
+rectangle(ax, 'Position', box, 'FaceColor', [0.86 0.78 0.66], 'EdgeColor', [0.66 0.58 0.46]);
+rectangle(ax, 'Position', [box(1) + box(3)/2 - 1, box(2) - 1.6, 2, 1.4], 'Curvature', 1, ...
+    'FaceColor', [0.45 0.50 0.58], 'EdgeColor', 'none');                                     % chair
+end
+
+function bench(ax, box)
+rectangle(ax, 'Position', box, 'FaceColor', [0.80 0.84 0.88], 'EdgeColor', [0.55 0.60 0.66]);
+end
+
+function w = hWallGaps(x0, x1, y, gaps, half)
+% Horizontal wall from x0 to x1 at y with door gaps centered at gaps
+cuts = sort([x0, reshape([gaps - half; gaps + half], 1, []), x1]);
+w = [cuts(1:2:end)', repmat(y, numel(cuts) / 2, 1), cuts(2:2:end)', repmat(y, numel(cuts) / 2, 1)];
+end
+
+function w = vWallGaps(x, y0, y1, gaps, half)
+% Vertical wall from y0 to y1 at x with door gaps centered at gaps
+h = hWallGaps(y0, y1, x, gaps, half);
+w = h(:, [2 1 4 3]);
 end
 
 %% ---------------------------------------------------------------------------------------------
