@@ -8,6 +8,7 @@ here = fileparts(mfilename('fullpath'));
 rows = {
     "Lab floor (Stevens)", "ReportLayout.mat",  "Stevens lab floor plan: 11 targets, 5 agents (the simulator paper's reference scenario)."
     "Office floor",        "OfficeFloor.mat",   "Office and lab building floor: 8 rooms with doors, halls and a lobby: 14 targets, 3 robots."
+    "Office floor with charging dock", "OfficeDock.mat", "The Office floor with a charging dock by the lobby and small batteries (2.5 Wh): for Battery-Aware ED-RHC."
     "City patrol",         "CityPatrol.mat",    "Police patrol on a street grid: 16 intersections and 5 sites, 4 patrol cars on the roads."
     "Harbor patrol",       "HarborPatrol.mat",  "Harbor, piers, breakwater and two islands: 12 buoys and berths, 3 boats."
     "Campus",              "Campus.mat",        "Building complex with a pond, quad and parking: 11 sites, 5 agents."

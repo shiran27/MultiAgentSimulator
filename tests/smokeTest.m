@@ -19,6 +19,9 @@ function smokeTest()
 %    'Linear Agent') runs.
 % 6. Scenarios (scenarioCatalog): each loads (with its background image, if any) and runs 10 s
 %    under every policy with Abstract Agents, and under Random Walk with Physical Agents.
+% 7. Battery and charging: an agent's predicted transit energy matches the energy it draws;
+%    on the office floor with a charging dock (small batteries that stop the robots when empty)
+%    Battery-Aware ED-RHC recharges every agent in time, while ED-RHC runs out.
 % Prints one line per check and errors at the end (non-zero exit under -batch) if any failed.
 
 root = fileparts(fileparts(mfilename('fullpath')));
@@ -223,6 +226,37 @@ for k = 1:height(cat)
 end
 warning(warnState);
 
+% ---- 7. Battery and charging ----
+try   % predicted transit energy = energy drawn, on a wall-routed edge
+    sim = reportScenario('Dijkstra Corners', {'Abstract Agent'});
+    P = sim.findEdge(8, 2).curvePoints;
+    for typeName = ["Abstract Agent", "Physical Agent"]
+        a = feval(reg.factoryFor('agenttype', char(typeName)), 1, P(1, :), 15);
+        rho = max(sum(vecnorm(diff(P), 2, 2)) / 15, a.shortestTransit(P));
+        Epred = a.transitEnergy(P, rho);
+        a.transitTime = rho; a.path = P; t = 0;
+        while ~isempty(a.path) && t < 60, a.update(0.05); t = t + 0.05; end
+        dev = a.battery.energyUsed / Epred - 1;
+        check(abs(dev) < 0.02, sprintf('%s: transit energy on edge 8-2 predicted %.0f J, drawn %.0f J (%+.1f%%)', ...
+            typeName, Epred, a.battery.energyUsed, 100 * dev));
+    end
+catch err
+    check(false, "transit energy prediction  ERROR " + err.message);
+end
+try   % the battery-aware policy recharges in time; ED-RHC runs out
+    tmp = load(fullfile(root, 'Configurations', 'OfficeDock.mat'), 's'); dock = tmp.s;
+    T = 600;
+    for typeName = ["Abstract Agent", "Physical Agent"]
+        [low, n, J] = batteryRun(dock, 'Battery-Aware ED-RHC', typeName, T);
+        check(low > 0 && n >= 3 && isfinite(J), sprintf(['Battery-Aware ED-RHC, %s, office ' ...
+            'with dock (%d s): lowest SOC %.1f%%, %d charges, J = %.1f'], typeName, T, low, n, J));
+    end
+    [low, ~, J] = batteryRun(dock, 'ED-RHC', "Abstract Agent", T);
+    check(low <= 0, sprintf('ED-RHC there runs out of battery (lowest SOC %.1f%%, J = %.1f)', low, J));
+catch err
+    check(false, "battery-aware policy  ERROR " + err.message);
+end
+
 if isempty(failures)
     fprintf('\nsmokeTest PASSED: %d checks\n', nChecks);
 else
@@ -267,6 +301,21 @@ end
             ok = false;
             detail = sprintf('ERROR %s (%s, line %d)', err.message, err.stack(1).name, err.stack(1).line);
         end
+    end
+
+    function [low, charges, J] = batteryRun(sc, policyName, typeName, T)
+        % Lowest SOC [%] of any agent, charging sessions (NaN if the policy does not count
+        % them) and J(T) of a run of layout sc
+        sim = scenarioModel(sc, typeName);
+        sim.setMetrics(["Average Uncertainty J(t)", "Minimum SOC"]);
+        sim.setActivePolicy(policyName); sim.resetSimulationState();
+        clock = SimulationClock(T, 0.05);
+        while ~clock.isFinished()
+            dt = clock.tick(); sim.step(dt, clock.currentTime); sim.updateTargetsAndLogObjective(clock.currentTime, dt);
+        end
+        v = sim.metricValues(clock.currentTime);
+        low = v.MinimumSOC; J = v.AverageUncertainty;
+        charges = NaN; if isprop(sim.policy, 'charges'), charges = sim.policy.charges; end
     end
 
     function sim = scenarioModel(sc, typeName)

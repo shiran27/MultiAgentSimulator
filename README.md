@@ -54,6 +54,7 @@ The **Scenario** dropdown (top of the Tools panel; `MainUI.loadScenario(name)` i
 |---|---|---|
 | Lab floor (Stevens) | `ReportLayout.mat` | Stevens lab floor plan; 11 targets, 5 agents; the simulator paper's reference scenario |
 | Office floor | `OfficeFloor.mat` | One floor of an office and lab building: eight rooms with doors (gaps in the walls), a hall and a lobby; 14 targets in rooms and halls, 3 robots |
+| Office floor with charging dock | `OfficeDock.mat` | The office floor with a charging station (300 W dock by the lobby) and small batteries (2.5 Wh, about four minutes of operation; the robots stop when empty): the scenario of [Battery-aware ED-RHC](#battery-aware-ed-rhc-and-charging-stations) |
 | City patrol | `CityPatrol.mat` | Police patrol on a street grid: 16 intersections and 5 sites (police HQ, bank, school, mall, hospital); every edge runs along a road, so the 4 patrol cars stay on the roads; the nine blocks are obstacles |
 | Harbor patrol | `HarborPatrol.mat` | Coast with a port, piers and a breakwater, two islands; 12 buoys and berths, 3 boats |
 | Campus | `Campus.mat` | Zoomed-out building complex: six buildings and a pond (obstacles), quad, parking; 11 sites, 5 agents |
@@ -92,6 +93,9 @@ The experiment harness (`Experiments/runTrial`, `Experiments/trialDefaults.m`) s
 | `agentSpeed` | maximum speed of each agent (or one value for all) |
 | `agentAccel` | maximum acceleration of each agent (or one value for all) |
 | `agentProfile` | speed profile of each agent: `"constant"`, `"SO"` or `"FO"` |
+| `agentBatteryWh` | battery capacity of each agent [Wh] (or one value for all) |
+| `agentStopWhenEmpty` | 1 if an agent stops when its battery is empty (or one value for all) |
+| `chargers`, `chargePower` | targets that are charging stations (`ChargingStation`), and their charging power [W] |
 | `background` | background image (a file in `Configurations/backgrounds/`, the project root, or a full path) |
 | `uncertaintyMode` | one of the modes above |
 | `A`, `B`, `R0` | per-target `A_i`, `B_i`, `R_i(0)` (`n x 1`, or one value for all) |
@@ -106,7 +110,7 @@ Run from the repo root before opening a pull request:
 ```
 matlab -batch "addpath(genpath(pwd)); smokeTest"
 ```
-`tests/smokeTest.m` checks the defaults and the layout file round trip, then runs every registered policy x path planner x agent type for 20 s on `ReportLayout.mat` and checks that each run finishes with a finite objective `J`. It also checks the agent types (older names, every speed profile, service only at rest, feedback agents keeping pace, smooth heading) and that William's Joint RHC harness runs. It prints one line per check and exits with an error if any check fails (about 20 s). New components registered in `ComponentRegistry` are picked up automatically.
+`tests/smokeTest.m` checks the defaults and the layout file round trip, then runs every registered policy x path planner x agent type for 20 s on `ReportLayout.mat` and checks that each run finishes with a finite objective `J`. It also checks the agent types (older names, every speed profile, service only at rest, Physical Agents arriving when planned, smooth heading), that William's Joint RHC harness runs, every catalog scenario, and the battery model (predicted transit energy, Battery-Aware ED-RHC recharging in time while ED-RHC runs out). It prints one line per check and exits with an error if any check fails (about 20 s). New components registered in `ComponentRegistry` are picked up automatically.
 
 `tests/guiTest.m` drives the real GUI with MATLAB's App Testing Framework: it loads `ReportLayout.mat` over the lab background and runs to the end, plays, pauses and resets, saves, clears and reloads a layout, builds a small scenario by clicking, and checks that a GUI run and a headless `runTrial` give the same `J`. It needs a display; the windows open on a secondary monitor if there is one and close when it finishes (about 50 s):
 ```
@@ -178,7 +182,8 @@ New agent types are subclasses for different platforms (dynamics, limits, sensin
 | Policy | Abstract | Physical | Notes |
 |---|---|---|---|
 | Random Walk | ✓ | ✓ | No timing assumptions; dwell from the current `R` at arrival. Each agent moves at its own pace (a Physical Agent: `shortestTransit`) |
-| Battery Efficient | ✓ | ✓ | Every agent has a battery; each agent moves at its own pace |
+| Battery Efficient (legacy heuristic) | ✓ | ✓ | Every agent has a battery; each agent moves at its own pace. Superseded by Battery-Aware ED-RHC |
+| Battery-Aware ED-RHC | ✓ | ✓ | As ED-RHC; predicts each plan's battery energy with the agent's own `transitEnergy` |
 | ED-RHC | ✓ | ✓ | Hands the agent its planned transit: `y/maxSpeed`, or the agent's `shortestTransit` if longer (a Physical Agent's own pace). `"constant"` is the Automatica model; `"SO"` runs it with the SO shape (the JS SO#) |
 | ED-ORHC-SO / -FO | ✓ | ✓ | Hands over the optimal transit time (no shorter than the agent's `shortestTransit`), profile and limits. A Physical Agent keeps the time; its profile is the planned one where that fits its limits, so its energy can differ from the plan's |
 | Classical RHC [1], Divergent RHC, Joint RHC, Joint RHC N | ✓ with `"constant"`; ≈ with `"SO"`/`"FO"` (1.5× slower than planned) | ≈ | Plan transits as path length / `maxSpeed`, which a Physical Agent cannot keep (it takes its `shortestTransit`). Joint RHC needs exactly 2 agents |
@@ -231,6 +236,38 @@ Agents may share targets. During a spike that the agents present cannot overcome
 - **`clearFirst`** (default `false`, which follows the paper). Set it to `true` for the JS simulator's energy-aware convention: every visit clears the target, there is no RHCP1 on arrival, and plans only include visits that clear `j`.
 
 `Experiments/validation/validateEDORHC` compares both methods (without limits) with the JS simulator (methods 9 and 11) under the JS conventions.
+
+### Battery-aware ED-RHC and charging stations
+
+`Battery-Aware ED-RHC` (`Components/AgentPolicy/BatteryAwareRHCPolicy.m`, a subclass of `EDRHCPolicy`) keeps every agent able to reach a charging station. It replaces the legacy `Battery Efficient` heuristic, which is kept in the registry for comparison.
+
+- **Charging stations** (`Components/ChargingStation.m`, a `Target` subclass). A station has no uncertainty (`R = A = 0`) and is drawn as a yellow square. Every agent at rest there recharges at `chargePower` (W) until full; the agent still draws its idle power. Layouts place stations by target index (fields `chargers`, `chargePower`). Other policies treat a station as an ordinary node.
+- **Energy of a plan.** Each agent predicts its battery energy from the battery's power model (`Battery`):
+  - at rest: `idlePower` per second;
+  - a transit of length `y` in time `rho`: `Agent.transitEnergy(path, rho)` = `movePower * rho + (alphaVel * y + gammaAcc * int |a|^2 dt) / eta`. The speed term integrates to `alphaVel * y` for any speed profile. A Physical Agent computes `int |a|^2 dt` from the reference it will follow.
+  - The prediction matches the energy drawn to 0.1% on a wall-routed edge (smoke test).
+- **Terminal SOC constraint.** Every RHCP plan `[u_i v_i rho_ij u_j v_j]` must end, at `j`, with enough energy for three things: the cheapest route from `j` to the nearest station, the wait there while every other agent using that station charges fully once (the worst case, when they all arrive together), and a reserve `socMin` (5%) of the capacity:
+  `idlePower * (u_i + v_i + u_j + v_j) + E_ij <= E_left - socMin * capacity - E_station(j)`.
+  The constraint is linear in the plan, so it is added as one more row to the constraints of each RHCP case (`EDRHCPolicy.planConstraint`). It caps the dwells of RHCP1 and RHCP2, and RHCP3 drops the neighbors the agent cannot afford. Stations are never planned as monitoring visits.
+- **Recharging.** When the agent cannot afford any uncovered neighbor, even without dwelling (or cannot afford to wait while every neighbor is covered), it goes to the nearest station along its cheapest route, one edge per decision. It waits (`queueWait`, 1 s) while another agent is at or heading to the station, charges until full, and then resumes ED-RHC with RHCP3. Agents on their way to a station do not block the targets they pass, so an agent leaving a station can always get out.
+- **Parameters.** `socMin` (0.05), `queueWait` (1 s), and everything of ED-RHC (`alpha`, `H`, `transit`, ...). `charges` counts the charging sessions; each station records `energyDelivered` and `busyTime`.
+- **Metric.** `Minimum SOC` (`MinimumSOC`) is the lowest SOC of any agent so far. Use it with `setMetrics` or `runTrial`'s `Metrics` parameter.
+- **Without stations** the policy is ED-RHC. With unlimited batteries on the dock scenario it never charges, and its J is 2% above ED-RHC's (140.6 vs 137.6): it never plans a visit to the station, and its RHCPs carry the extra, inactive constraint.
+
+On **Office floor with charging dock** (1500 s, seed 1):
+
+| Policy | Agent | J | Lowest SOC | Charges | Batteries empty |
+|---|---|---|---|---|---|
+| ED-RHC, unlimited batteries | Abstract | 137.6 | 100% | 0 | none |
+| Battery-Aware ED-RHC | Abstract | 255.2 | 9.9% | 19 (dock busy 32% of the time) | none |
+| ED-RHC | Abstract | 8786 | 0 | 0 | all three, at about 225 s |
+| Battery Efficient (legacy) | Abstract | 10233 | 0 | 0 | two, at about 243 s |
+| Random Walk | Abstract | 9093 | 0 | 0 | all three, at 214-230 s |
+| ED-RHC, unlimited batteries | Physical | 272.7 | 100% | 0 | none |
+| Battery-Aware ED-RHC | Physical | 688.2 | 12.4% | 25 | none |
+| ED-RHC | Physical | 10038 | 0 | 0 | all three, at about 145 s |
+
+A station must charge faster than its agents draw on average. Here the three robots draw about 40 W each and the dock charges at 300 W. At 100 W even the battery-aware policy cannot keep them all going.
 
 ## Headless experiments
 

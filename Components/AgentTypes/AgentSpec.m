@@ -17,10 +17,11 @@ classdef AgentSpec
         kp double = NaN                  % PhysicalAgent tracking gains (NaN = TrackingController defaults)
         kd double = NaN
         batteryWh double = NaN           % battery capacity [Wh] (NaN = Battery default)
+        stopWhenEmpty double = NaN       % 1: the agent stops when its battery is empty (NaN = no)
     end
 
     properties (Constant)
-        settings = ["maxSpeed", "maxAccel", "profile", "kp", "kd", "batteryWh"]
+        settings = ["maxSpeed", "maxAccel", "profile", "kp", "kd", "batteryWh", "stopWhenEmpty"]
     end
 
     methods
@@ -33,10 +34,12 @@ classdef AgentSpec
                 opts.Kp double = NaN
                 opts.Kd double = NaN
                 opts.BatteryWh double = NaN
+                opts.StopWhenEmpty double = NaN
             end
             obj.type = opts.Type; obj.maxSpeed = opts.MaxSpeed; obj.maxAccel = opts.MaxAccel;
             obj.profile = opts.Profile; obj.kp = opts.Kp; obj.kd = opts.Kd;
             obj.batteryWh = opts.BatteryWh;
+            obj.stopWhenEmpty = opts.StopWhenEmpty;
         end
 
         function a = spawn(obj, index, position, factory)
@@ -55,6 +58,7 @@ classdef AgentSpec
             if ~isnan(obj.kp), a.controller.kp = obj.kp; end
             if ~isnan(obj.kd), a.controller.kd = obj.kd; end
             if ~isnan(obj.batteryWh), a.battery.capacityWh = obj.batteryWh; end
+            if ~isnan(obj.stopWhenEmpty), a.stopWhenEmpty = logical(obj.stopWhenEmpty); end
         end
     end
 
@@ -63,7 +67,8 @@ classdef AgentSpec
             % The spec of an existing agent (type: its registered name, if known)
             if nargin < 2, type = ""; end
             spec = AgentSpec(Type=type, MaxSpeed=a.state.maxSpeed, MaxAccel=a.state.maxAccel, ...
-                Profile=a.profile, Kp=a.controller.kp, Kd=a.controller.kd, BatteryWh=a.battery.capacityWh);
+                Profile=a.profile, Kp=a.controller.kp, Kd=a.controller.kd, BatteryWh=a.battery.capacityWh, ...
+                StopWhenEmpty=double(a.stopWhenEmpty));
         end
     end
 end

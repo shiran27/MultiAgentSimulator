@@ -303,6 +303,11 @@ classdef ScenarioModel < handle
             s.agentSpeed = arrayfun(@(a) a.state.maxSpeed, obj.agents);      % max speed per agent
             s.agentAccel = arrayfun(@(a) a.state.maxAccel, obj.agents);      % max acceleration per agent
             s.agentProfile = arrayfun(@(a) a.profile, obj.agents);           % speed profile per agent
+            s.agentBatteryWh = arrayfun(@(a) a.battery.capacityWh, obj.agents);   % battery capacity per agent
+            s.agentStopWhenEmpty = arrayfun(@(a) double(a.stopWhenEmpty), obj.agents);  % stops when empty
+            st = find(arrayfun(@(t) isa(t, 'ChargingStation'), obj.targets));
+            s.chargers = st;                                                  % charging stations (targets)
+            s.chargePower = arrayfun(@(k) obj.targets(k).chargePower, st);    % their power [W]
             s.background = obj.background;                                    % background image file
             s.targetType = obj.targetType;                                    % target type (registry name)
             s.uncertaintyMode = obj.uncertaintyMode;
@@ -319,8 +324,17 @@ classdef ScenarioModel < handle
                 obj.targetFactory = obj.registry.factoryFor('targettype', char(s.targetType));
                 obj.targetType = string(s.targetType);
             end
+            stations = [];
+            if isfield(s, 'chargers'), stations = s.chargers(:)'; end
             for k = 1:size(s.targets, 1)
-                t = obj.addTarget(s.targets(k,:));
+                if ismember(k, stations)                % a charging station
+                    t = ChargingStation(k, s.targets(k,:));
+                    p = layoutValue(s, 'chargePower', find(stations == k, 1));
+                    if ~isempty(p), t.chargePower = p; end
+                    obj.targets(end+1) = t;
+                else
+                    t = obj.addTarget(s.targets(k,:));
+                end
                 t.setRates(layoutValue(s, 'A', k), layoutValue(s, 'B', k), layoutValue(s, 'R0', k));
             end
             if isfield(s, 'walls'), obj.walls = s.walls; end
@@ -340,6 +354,10 @@ classdef ScenarioModel < handle
                     if ~isempty(accel), spec.maxAccel = accel; end
                     prof = layoutValue(s, 'agentProfile', k);
                     if ~isempty(prof), spec.profile = prof; end
+                    wh = layoutValue(s, 'agentBatteryWh', k);
+                    if ~isempty(wh), spec.batteryWh = wh; end
+                    stop = layoutValue(s, 'agentStopWhenEmpty', k);
+                    if ~isempty(stop), spec.stopWhenEmpty = stop; end
                     obj.addAgentOnTarget(obj.targets(s.agentStarts(k)).position, spec.maxSpeed, 1e-6, spec);
                 end
             end

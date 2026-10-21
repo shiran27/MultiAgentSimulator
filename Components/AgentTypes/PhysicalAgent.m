@@ -59,6 +59,21 @@ classdef PhysicalAgent < Agent
             rho = P.rho;
         end
 
+        function Ja = accelEnergy(obj, pts, rho)
+            % int |a|^2 dt of the reference along pts taking rho (along the path and across it),
+            % sampled at 0.05 s as the agent follows it
+            G = obj.geometry(pts);
+            P = obj.referenceProfile(G, SpeedProfile.shape(obj.profile, G.s(end), ...
+                max(rho, eps), Inf, Inf));
+            dt = 0.05;
+            t = [unique([0:dt:P.rho, P.rho]), P.rho, P.rho];        % then two steps at rest
+            p = zeros(numel(t), 2);
+            for k = 1:numel(t), p(k, :) = obj.curveAt(G, SpeedProfile.at(P, t(k))); end
+            v = [0 0; diff(p) / dt];
+            a = diff(v) / dt;
+            Ja = sum(sum(a.^2, 2)) * dt;
+        end
+
         function update(obj, dt)
             c = obj.controller;
             if obj.batteryEmpty()
@@ -116,14 +131,19 @@ classdef PhysicalAgent < Agent
                 pts = [obj.state.pos; pts];
             end
             G = obj.geometry(pts);
-            fastest = obj.fastestProfile(G);
-            P = obj.plannedProfile(G.s(end));
-            if P.rho < fastest.rho || ~obj.keepsLimits(P, G)
-                P = SpeedProfile.retime(fastest, max(P.rho, fastest.rho));
-            end
+            P = obj.referenceProfile(G, obj.plannedProfile(G.s(end)));
             obj.leg = struct('G', G, 'P', P, 'tau', 0, 'p', G.pts(1, :), 'v', [0 0]);
             obj.legTime = P.rho;
             obj.holdPoint = [];
+        end
+
+        function P = referenceProfile(obj, G, P)
+            % The planned profile P if it keeps within the reference limits along G, else the
+            % fastest profile that does, slowed down to P's time (if that is longer)
+            fastest = obj.fastestProfile(G);
+            if P.rho < fastest.rho || ~obj.keepsLimits(P, G)
+                P = SpeedProfile.retime(fastest, max(P.rho, fastest.rho));
+            end
         end
 
         function G = geometry(obj, pts)

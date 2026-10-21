@@ -9,7 +9,7 @@ function makeScenarioLayouts()
 here = fileparts(mfilename('fullpath'));
 bgDir = fullfile(here, 'backgrounds');
 if ~isfolder(bgDir), mkdir(bgDir); end
-makers = {@cityPatrol, @officeFloor, @harborPatrol, @campus, @museum};
+makers = {@cityPatrol, @officeFloor, @officeDock, @harborPatrol, @campus, @museum};
 for k = 1:numel(makers)
     [name, s, drawFcn] = makers{k}();
     s.background = name + ".png";
@@ -280,6 +280,32 @@ draw = @drawOffice;
         cen = [15 92.5; 38 92.5; 62 92.5; 85 92.5; 26 41; 32 21; 76 41; 88 21];
         for k = 1:numel(names2), label(ax, cen(k, 1), cen(k, 2), char(names2(k)), 0); end
         label(ax, 50, 30, 'Lobby', 0); label(ax, 20, 50, 'Hall', 0);
+    end
+end
+
+function [name, s, draw] = officeDock()
+% The Office floor with a charging dock by the lobby entrance (a ChargingStation, 300 W) and
+% small batteries (2.5 Wh, about four minutes of operation; the robots stop when empty): a
+% scenario for the battery-aware policy, whose robots must recharge. The three robots draw
+% about 40 W each, so one dock can keep them going only if it charges much faster than that
+[~, s, drawOffice] = officeFloor();
+name = "OfficeDock";
+dock = size(s.targets, 1) + 1;
+s.targets(dock, :) = [50 7];
+s.edges(end+1, :) = [14 dock];                             % Lobby - Dock
+s.A(dock) = 0; s.R0(dock) = 0;
+s.chargers = dock; s.chargePower = 300;
+s.agentBatteryWh = 2.5; s.agentStopWhenEmpty = 1;
+draw = @drawDock;
+
+    function drawDock(ax)
+        drawOffice(ax);
+        rectangle(ax, 'Position', [45.5 4.8 9 4.6], 'Curvature', 0.3, ...
+            'FaceColor', [0.30 0.33 0.38], 'EdgeColor', [0.18 0.20 0.23], 'LineWidth', 1.2);
+        fill(ax, [48.3 46.3 47.8 46.9 49.3 47.8 48.9], [9.0 6.9 6.9 5.2 7.5 7.5 9.0], ...
+            [1 0.82 0.1], 'EdgeColor', 'none');            % lightning bolt
+        text(ax, 51.8, 7.1, 'DOCK', 'HorizontalAlignment', 'center', 'FontSize', 9, ...
+            'FontWeight', 'bold', 'Color', [1 1 1], 'FontName', 'Helvetica');
     end
 end
 

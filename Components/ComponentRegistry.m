@@ -22,7 +22,7 @@ classdef ComponentRegistry < handle
 
             obj.policies = containers.Map('KeyType','char','ValueType','any');
             obj.policies('Random Walk')       = @() RandomWalkPolicy();
-            obj.policies('Battery Efficient') = @() BatteryEfficientPolicy();
+            obj.policies('Battery Efficient') = @() BatteryEfficientPolicy();   % legacy heuristic
             obj.policies('Classical RHC [1]') = @() RHCPolicy();
             obj.policies('Divergent RHC')     = @() DivergentRHCPolicy();
             obj.policies('Joint RHC')         = @() JointRHCPolicy();
@@ -30,6 +30,7 @@ classdef ComponentRegistry < handle
             obj.policies('ED-RHC')            = @() EDRHCPolicy();
             obj.policies('ED-ORHC-SO')        = @() EDRHCPolicy(Transit="SO");
             obj.policies('ED-ORHC-FO')        = @() EDRHCPolicy(Transit="FO");
+            obj.policies('Battery-Aware ED-RHC') = @() BatteryAwareRHCPolicy();
             obj.policies('Chase Events (example)') = @() ChaseEventsPolicy();
 
             % What each policy assumes of the agents' motion (a policy may also declare it as a
@@ -53,6 +54,7 @@ classdef ComponentRegistry < handle
             obj.metrics = containers.Map('KeyType','char','ValueType','any');
             obj.metrics('Average Uncertainty J(t)') = @() AverageUncertainty();
             obj.metrics('Missed Events (example)')  = @() MissedEvents();
+            obj.metrics('Minimum SOC')              = @() MinimumSOC();
 
             % Agent types before the consolidation of 2026-10-20, kept so older scripts and
             % layouts run unchanged (e.g. William's Joint RHC studies use 'Linear Agent')

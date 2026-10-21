@@ -4,7 +4,9 @@ classdef Battery < handle
     % with the processor and communication loads of a moving or idle agent. Every agent holds
     % one (Agent.battery); different platforms can use different parameters (AgentSpec
     % batteryWh, or set them on agent.battery). The battery is reported (SOC); an agent stops
-    % when it is empty only if its stopWhenEmpty is true.
+    % when it is empty only if its stopWhenEmpty is true. A ChargingStation recharges the
+    % batteries of the agents resting at it (recharge). idlePower, movePower and transitEnergy
+    % predict the energy of a plan, for battery-aware policies.
     properties
         capacityWh = 26.0                 % capacity [Wh]
         P0 = 5.82                         % base motion power [W]
@@ -21,6 +23,8 @@ classdef Battery < handle
     properties (Dependent)
         soc                               % state of charge in [0, 1]
         percentage                        % state of charge in percent, at least 0
+        remaining                         % energy left [J] (negative once overdrawn)
+        capacity                          % capacity [J]
     end
 
     methods
@@ -42,6 +46,27 @@ classdef Battery < handle
             obj.energyUsed = obj.energyUsed + (pLoad + pMotion) / obj.eta * dt;
         end
 
+        function recharge(obj, power, dt)
+            % Charging at power [W] over dt, up to full
+            obj.energyUsed = max(0, obj.energyUsed - power * dt);
+        end
+
+        function P = idlePower(obj)
+            % Power drawn at rest [W]
+            P = (obj.cpuIdle + obj.commStandby + obj.P0) / obj.eta;
+        end
+
+        function P = movePower(obj)
+            % Power drawn while moving, without the speed and acceleration terms [W]
+            P = (obj.cpuMove + obj.commActive + obj.P0) / obj.eta;
+        end
+
+        function E = transitEnergy(obj, rho, y, Ja)
+            % Energy [J] of a transit of length y in time rho with int |a|^2 dt = Ja: the
+            % speed term integrates to alphaVel * y whatever the speed profile
+            E = obj.movePower() * rho + (obj.alphaVel * y + obj.gammaAcc * Ja) / obj.eta;
+        end
+
         function reset(obj)
             obj.energyUsed = 0;
         end
@@ -52,6 +77,14 @@ classdef Battery < handle
 
         function p = get.percentage(obj)
             p = max(0, 100 * obj.soc);
+        end
+
+        function E = get.remaining(obj)
+            E = obj.capacityWh * 3600 - obj.energyUsed;
+        end
+
+        function E = get.capacity(obj)
+            E = obj.capacityWh * 3600;
         end
     end
 end

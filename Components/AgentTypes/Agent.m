@@ -124,10 +124,30 @@ classdef (Abstract) Agent < handle & matlab.mixin.Heterogeneous
             set(obj.textHandle, 'Position', [obj.state.pos(1), obj.state.pos(2), 0], 'String', obj.label());
         end
 
+        function tf = batteryEmpty(obj)
+            % Has the agent stopped for an empty battery? (only with stopWhenEmpty)
+            tf = obj.stopWhenEmpty && obj.battery_percentage <= 0;
+        end
+
         function rho = shortestTransit(~, ~)
             % Shortest transit time along a path (N x 2 points) this agent can keep: 0, since an
             % idealized agent follows any plan (PhysicalAgent overrides this)
             rho = 0;
+        end
+
+        function E = transitEnergy(obj, pts, rho)
+            % Predicted battery energy [J] of a transit along pts (N x 2) taking rho, with the
+            % agent's own speed profile
+            y = sum(vecnorm(diff(pts, 1, 1), 2, 2));
+            E = obj.battery.transitEnergy(rho, y, obj.accelEnergy(pts, rho));
+        end
+
+        function Ja = accelEnergy(obj, pts, rho)
+            % int |a|^2 dt of a transit along pts taking rho with the agent's own profile (0 for
+            % "constant", whose jumps in speed draw no modeled power)
+            y = sum(vecnorm(diff(pts, 1, 1), 2, 2));
+            Ja = SpeedProfile.energy(obj.profile, y, rho);
+            if ~isfinite(Ja), Ja = 0; end
         end
 
         function calculate_energy(obj, dt)
@@ -217,8 +237,5 @@ classdef (Abstract) Agent < handle & matlab.mixin.Heterogeneous
             obj.transitLimits = [Inf Inf];
         end
 
-        function tf = batteryEmpty(obj)
-            tf = obj.stopWhenEmpty && obj.battery_percentage <= 0;
-        end
     end
 end

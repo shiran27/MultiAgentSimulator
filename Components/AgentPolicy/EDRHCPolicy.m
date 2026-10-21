@@ -122,27 +122,7 @@ classdef EDRHCPolicy < Policy
                     return;
                 end
             end
-            [j, rho] = obj.solve(3, agent, model, adj, curIdx, simTime);
-            if isempty(j)
-                % Every neighbor is covered: stay at i (still servicing it) and try RHCP3 again;
-                % the agent leaves as soon as a neighbor is uncovered, or solves RHCP2 first if
-                % R_i reaches 0 meanwhile (as the JS simulator does)
-                stage = s.stage;
-                if stage == "travel", stage = "active"; end
-                obj.dwell(agent, model, adj, curIdx, stage, obj.recheckTime, true);
-                return;
-            end
-            obj.states(agent.index) = struct('stage', "travel", 'target', j, 'covered', [], 'hold', false);
-            if isprop(agent, 'transitTime')   % hand the planned transit over to the agent
-                agent.transitTime = rho;
-                if obj.transit == "constant speed"   % the agent's own profile over rho
-                    agent.transitProfile = ""; agent.transitLimits = [Inf Inf];
-                else
-                    agent.transitProfile = obj.transit; agent.transitLimits = [obj.speedLimit, obj.accelLimit];
-                end
-            end
-            cmd.kind = "move";
-            cmd.targetIdx = j;
+            cmd = obj.depart(agent, model, adj, curIdx, simTime);
         end
 
         function onStep(obj, agent, model, simTime)
@@ -198,7 +178,8 @@ classdef EDRHCPolicy < Policy
                 end
                 d = struct('R', R, 'A', A, 'B', B, 'j', k, 'rho', rho0, 'w', weights, ...
                     'y', y, 'vb', obj.speedLimit, 'ub', obj.accelLimit);
-                for c = obj.cases(kind, d, uBi, rhoRange(1))
+                [ac, bc] = obj.planConstraint(agent, model, i, hood(k), d, rhoRange);
+                for c = obj.cases(kind, d, uBi, rhoRange(1), ac, bc)
                     [cost, x, rho] = obj.solveCase(d, c, rhoRange);
                     if cost < best.cost
                         best = struct('cost', cost, 'j', hood(k), 'x', x, 'rho', rho, 'uBi', uBi);
@@ -254,6 +235,59 @@ classdef EDRHCPolicy < Policy
         end
     end
 
+    methods (Access = protected)
+        function covered = coveredNeighbors(~, agent, model, adj, i)
+            % For each neighbor of i (in index order): is another agent at it or heading to it?
+            nbrs = find(adj(i, :));
+            covered = false(size(nbrs));
+            for b = 1:numel(model.agents)
+                other = model.agents(b);
+                if other ~= agent
+                    covered = covered | nbrs == other.current_target_idx;
+                end
+            end
+        end
+
+        function [a, b] = planConstraint(~, ~, ~, ~, ~, ~, ~)
+            % An extra constraint a * [u_i v_i u_j v_j rho]' <= b on every plan of an RHCP at i
+            % that visits neighbor j (args: agent, model, i, j, d, rhoRange). None by default
+            % (a = []); BatteryAwareRHCPolicy bounds the plan's energy
+            a = []; b = [];
+        end
+
+        function cmd = depart(obj, agent, model, adj, curIdx, simTime)
+            % RHCP3: the next target j and the transit to it, handed over to the agent
+            cmd = struct();
+            s = obj.stateOf(agent);
+            [j, rho] = obj.solve(3, agent, model, adj, curIdx, simTime);
+            if isempty(j)
+                % Every neighbor is covered: stay at i (still servicing it) and try RHCP3 again;
+                % the agent leaves as soon as a neighbor is uncovered, or solves RHCP2 first if
+                % R_i reaches 0 meanwhile (as the JS simulator does)
+                stage = s.stage;
+                if stage == "travel", stage = "active"; end
+                obj.dwell(agent, model, adj, curIdx, stage, obj.recheckTime, true);
+                return;
+            end
+            obj.states(agent.index) = struct('stage', "travel", 'target', j, 'covered', [], 'hold', false);
+            if isprop(agent, 'transitTime')   % hand the planned transit over to the agent
+                agent.transitTime = rho;
+                if obj.transit == "constant speed"   % the agent's own profile over rho
+                    agent.transitProfile = ""; agent.transitLimits = [Inf Inf];
+                else
+                    agent.transitProfile = obj.transit; agent.transitLimits = [obj.speedLimit, obj.accelLimit];
+                end
+            end
+            cmd.kind = "move";
+            cmd.targetIdx = j;
+        end
+
+        function forgetAgent(obj, index)
+            % Drop the agent's stage: its next plan starts as on arrival (RHCP1)
+            if isKey(obj.states, index), remove(obj.states, index); end
+        end
+    end
+
     methods (Access = private)
         function s = stateOf(obj, agent)
             if isKey(obj.states, agent.index)
@@ -269,18 +303,6 @@ classdef EDRHCPolicy < Policy
             agent.dwellRemaining = duration;
             obj.states(agent.index) = struct('stage', stage, 'target', i, ...
                 'covered', obj.coveredNeighbors(agent, model, adj, i), 'hold', hold);
-        end
-
-        function covered = coveredNeighbors(~, agent, model, adj, i)
-            % For each neighbor of i (in index order): is another agent at it or heading to it?
-            nbrs = find(adj(i, :));
-            covered = false(size(nbrs));
-            for b = 1:numel(model.agents)
-                other = model.agents(b);
-                if other ~= agent
-                    covered = covered | nbrs == other.current_target_idx;
-                end
-            end
         end
 
         function [out, rho] = solve(obj, kind, agent, model, adj, i, simTime)
@@ -320,9 +342,10 @@ classdef EDRHCPolicy < Policy
             w = [a, 1 - a];
         end
 
-        function cs = cases(obj, kind, d, uBi, rhoLo)
+        function cs = cases(obj, kind, d, uBi, rhoLo, ac, bc)
             % The smooth cases of RHCP<kind>, each as [ui vi uj vj] = M*[x; y; rho] + c over
-            % x, y >= 0 with Aineq*[x; y; rho] <= bineq (paper Sec. III, eqs. 20, 36, 46)
+            % x, y >= 0 with Aineq*[x; y; rho] <= bineq (paper Sec. III, eqs. 20, 36, 46), and
+            % the extra constraint ac * [ui vi uj vj rho]' <= bc if ac is not empty
             Rj = d.R(d.j); Aj = d.A(d.j); Bj = d.B(d.j);
             H = obj.H;
             if Bj > Aj
@@ -366,6 +389,12 @@ classdef EDRHCPolicy < Policy
                                 [1 + c1 1 1 + c1], H - uBi - c00 - c1 * uBi, true);
                         end
                     end
+            end
+            if nargin > 5 && ~isempty(ac)
+                for k = 1:numel(cs)
+                    cs(k).Aineq = [cs(k).Aineq; ac(1:4) * cs(k).M + [0 0 ac(5)]];
+                    cs(k).bineq = [cs(k).bineq; bc - ac(1:4) * cs(k).c'];
+                end
             end
             % drop empty cases: x = y = 0 with the shortest transit is in every nonempty case
             cs = cs(arrayfun(@(c) all(c.bineq - c.Aineq(:, 3) * rhoLo >= -obj.tol), cs));
