@@ -8,6 +8,7 @@ classdef ComponentRegistry < handle
         targetTypes    % name -> @(idx, pos) target
         metrics        % name -> @() metric
         aliases        % older agent type names -> @(idx, pos, speed) agent; resolved by factoryFor
+        retired        % retired component names -> what replaces them (factoryFor errors with it)
                        % but not listed by keysFor (so not offered in the GUI)
         assumptions    % policy name -> agent assumption, for policies that do not declare one
         agentCounts    % policy name -> number of agents it is built for
@@ -22,7 +23,6 @@ classdef ComponentRegistry < handle
 
             obj.policies = containers.Map('KeyType','char','ValueType','any');
             obj.policies('Random Walk')       = @() RandomWalkPolicy();
-            obj.policies('Battery Efficient') = @() BatteryEfficientPolicy();   % legacy heuristic
             obj.policies('Classical RHC [1]') = @() RHCPolicy();
             obj.policies('Divergent RHC')     = @() DivergentRHCPolicy();
             obj.policies('Joint RHC')         = @() JointRHCPolicy();
@@ -63,6 +63,11 @@ classdef ComponentRegistry < handle
             obj.aliases('Second-Order Agent') = @(idx, pos, sp) AbstractAgent(idx, pos, sp, Profile="SO");
             obj.aliases('Default Agent')      = @(idx, pos, sp) PhysicalAgent(idx, pos, sp);
             obj.aliases('Energy Agent')       = @(idx, pos, sp) PhysicalAgent(idx, pos, sp);
+
+            % Components no longer offered, with what replaces them (factoryFor says so)
+            obj.retired = containers.Map('KeyType','char','ValueType','any');
+            obj.retired('Battery Efficient') = "retired on 2026-10-21 (Old_Design/" + ...
+                "BatteryEfficientPolicy.m): use 'Battery-Aware ED-RHC' with a charging station, or 'ED-RHC'";
         end
 
         function a = assumptionOf(obj, name, policy)
@@ -94,6 +99,8 @@ classdef ComponentRegistry < handle
             m = obj.mapFor(kind);
             if ~isKey(m, name) && strcmpi(kind, 'agenttype') && isKey(obj.aliases, name)
                 h = obj.aliases(name);
+            elseif ~isKey(m, name) && isKey(obj.retired, char(name))
+                error('ComponentRegistry:Retired', '"%s" was %s', name, obj.retired(char(name)));
             else
                 h = m(name);
             end

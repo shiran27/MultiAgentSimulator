@@ -9,7 +9,8 @@ function smokeTest()
 %    scenario (Configurations/ReportLayout.mat, 5 agents) without error, with a finite J,
 %    finite agent positions, R >= 0, and at least one agent leaving its start target.
 % 4. Edge cases: a team mixing all agent types and an agent on a target with no edges, under
-%    every policy; Random Walk (clearing dwell) and Battery Efficient (cmd.dwellSeconds) dwell;
+%    every policy; Random Walk dwells (clearing dwell), and so does a policy that asks for its dwell
+%    in the move command (cmd.dwellSeconds; tests/FixedDwellPolicy);
 %    runTrial with the paper preset (Experiments/paper/paperDefaults); ED-ORHC-SO / -FO with
 %    speed and acceleration limits keep every agent within them.
 % 5. Agent types: the older type names still resolve (aliases); every type x speed profile runs;
@@ -101,9 +102,21 @@ try
 catch err
     check(false, "runTrial: paper preset  ERROR " + err.message);
 end
-for name = ["Random Walk", "Battery Efficient"]
-    [~, ~, dwelled] = runScenario(@() reportScenario('Dijkstra Corners', {'Physical Agent'}), name, 20, true);
-    check(dwelled, name + " agents dwell at targets");
+[~, ~, dwelled] = runScenario(@() reportScenario('Dijkstra Corners', {'Physical Agent'}), "Random Walk", 20, true);
+check(dwelled, "Random Walk agents dwell at targets");
+try   % a dwell requested in the move command is spent at the target before leaving
+    sim = reportScenario('Dijkstra Corners', {'Abstract Agent'});
+    sim.policyMap('Fixed Dwell (test)') = FixedDwellPolicy();
+    sim.setActivePolicy('Fixed Dwell (test)'); sim.resetSimulationState();
+    a = sim.agents(1); start = a.state.pos; waited = 0; clock = SimulationClock(1.9, 0.05);
+    while ~clock.isFinished()
+        dt = clock.tick(); sim.step(dt, clock.currentTime); sim.updateTargetsAndLogObjective(clock.currentTime, dt);
+        waited = waited + (a.dwellRemaining > 0);
+    end
+    check(norm(a.state.pos - start) < 1e-9 && waited > 30 && ~isempty(a.path), ...
+        'cmd.dwellSeconds: the agent waits at its target, with the next path set');
+catch err
+    check(false, "cmd.dwellSeconds  ERROR " + err.message);
 end
 for name = ["ED-ORHC-SO", "ED-ORHC-FO"]
     try
@@ -277,7 +290,7 @@ end
     function [ok, detail, dwelled] = runScenario(build, policyName, T, mustMove)
         % Runs the model from build() for T seconds under the policy; dwelled reports whether
         % any agent waited at a target
-        rng(0);   % Random Walk / Battery Efficient dwell draws
+        rng(0);   % Random Walk dwell draws
         dwelled = false;
         try
             sim = build();

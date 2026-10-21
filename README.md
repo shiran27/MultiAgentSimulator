@@ -182,7 +182,6 @@ New agent types are subclasses for different platforms (dynamics, limits, sensin
 | Policy | Abstract | Physical | Notes |
 |---|---|---|---|
 | Random Walk | ✓ | ✓ | No timing assumptions; dwell from the current `R` at arrival. Each agent moves at its own pace (a Physical Agent: `shortestTransit`) |
-| Battery Efficient (legacy heuristic) | ✓ | ✓ | Every agent has a battery; each agent moves at its own pace. Superseded by Battery-Aware ED-RHC |
 | Battery-Aware ED-RHC | ✓ | ✓ | As ED-RHC; predicts each plan's battery energy with the agent's own `transitEnergy` |
 | ED-RHC | ✓ | ✓ | Hands the agent its planned transit: `y/maxSpeed`, or the agent's `shortestTransit` if longer (a Physical Agent's own pace). `"constant"` is the Automatica model; `"SO"` runs it with the SO shape (the JS SO#) |
 | ED-ORHC-SO / -FO | ✓ | ✓ | Hands over the optimal transit time (no shorter than the agent's `shortestTransit`), profile and limits. A Physical Agent keeps the time; its profile is the planned one where that fits its limits, so its energy can differ from the plan's |
@@ -239,7 +238,7 @@ Agents may share targets. During a spike that the agents present cannot overcome
 
 ### Battery-aware ED-RHC and charging stations
 
-`Battery-Aware ED-RHC` (`Components/AgentPolicy/BatteryAwareRHCPolicy.m`, a subclass of `EDRHCPolicy`) keeps every agent able to reach a charging station. It replaces the legacy `Battery Efficient` heuristic, which is kept in the registry for comparison.
+`Battery-Aware ED-RHC` (`Components/AgentPolicy/BatteryAwareRHCPolicy.m`, a subclass of `EDRHCPolicy`) keeps every agent able to reach a charging station. It replaces Gabriel's `Battery Efficient` heuristic (nearest-neighbor moves with short random dwells, longer at low SOC, never recharging), retired on 2026-10-21; its code is kept in `Old_Design/` for reference, and old scripts that ask for it get an error naming the replacements.
 
 - **Charging stations** (`Components/ChargingStation.m`, a `Target` subclass). A station has no uncertainty (`R = A = 0`) and is drawn as a yellow square. Every agent at rest there recharges at `chargePower` (W) until full; the agent still draws its idle power. Layouts place stations by target index (fields `chargers`, `chargePower`). Other policies treat a station as an ordinary node.
 - **Energy of a plan.** Each agent predicts its battery energy from the battery's power model (`Battery`):
@@ -261,7 +260,7 @@ On **Office floor with charging dock** (1500 s, seed 1):
 | ED-RHC, unlimited batteries | Abstract | 137.6 | 100% | 0 | none |
 | Battery-Aware ED-RHC | Abstract | 255.2 | 9.9% | 19 (dock busy 32% of the time) | none |
 | ED-RHC | Abstract | 8786 | 0 | 0 | all three, at about 225 s |
-| Battery Efficient (legacy) | Abstract | 10233 | 0 | 0 | two, at about 243 s |
+| Battery Efficient (retired) | Abstract | 10233 | 0 | 0 | two, at about 243 s |
 | Random Walk | Abstract | 9093 | 0 | 0 | all three, at 214-230 s |
 | ED-RHC, unlimited batteries | Physical | 272.7 | 100% | 0 | none |
 | Battery-Aware ED-RHC | Physical | 688.2 | 12.4% | 25 | none |
@@ -275,13 +274,13 @@ A station must charge faster than its agents draw on average. Here the three rob
 
 ```matlab
 out = runTrial(struct('Layout', "ReportLayout.mat", 'AgentStarts', "layout", ...
-    'Policy', "Battery Efficient", 'Planner', "Energy Efficient", 'AgentType', "Physical Agent", ...
+    'Policy', "ED-RHC", 'Planner', "Energy Efficient", 'AgentType', "Physical Agent", ...
     'UncertaintyMode', "Static Uniform", 'A_base', 1, 'B', 10, 'EndTime', 500, 'Seed', 1, 'Log', true));
 ```
 
 - `AgentStarts`: `"auto"` (spread evenly), `"layout"` (the start targets stored in the layout file), or target indices such as `[1 5]`.
 - `Seed`: the `rng` seed set before simulating (`-1`, the default, leaves `rng` as it is).
-- `Policy_<property>`: sets a property of the active policy, e.g. `'Policy_dwellScale', 0` turns off the Random Walk dwell and `'Policy_dwellRange', [0 0]` the Battery Efficient dwell.
+- `Policy_<property>`: sets a property of the active policy, e.g. `'Policy_dwellScale', 0` turns off the Random Walk dwell and `'Policy_alpha', 0.5` sets ED-RHC's alpha.
 - `Log = true`: `out.log` holds the per-step time, `J(t)`, agent positions, velocities, accelerations, headings, SOC, battery energy and `J_e`; `out.metrics` holds per-agent path length `L`, heading change `Θ`, integrated squared acceleration `E_a`, final SOC and energy (`Experiments/metrics/`).
 
 `Experiments/runSweep(grid)` runs every combination of parameter values, and `analyzeResults` compares the variants.
@@ -293,7 +292,7 @@ out = runTrial(struct('Layout', "ReportLayout.mat", 'AgentStarts', "layout", ...
 matlab -batch "addpath(genpath(pwd)); exportPaperResults"
 matlab -batch "addpath(genpath(pwd)); exportPaperResults(Quick=true)"
 ```
-The full run (500 s runs, 4 seeds) takes about ten minutes and writes to `results/paper/`; `Quick=true` (60 s runs, 2 seeds, about 80 s) writes to `results/paper_quick/`. The output folder holds `PaperResults.pdf`, `runs.csv` (every run), `comparison.csv`, LaTeX tables and `macros.tex` for the paper to `\input`, and `figures/` (PNG; the plots also as PDF).
+The full run (500 s runs, 4 seeds) takes about ten minutes and writes to `results/paper/`; `Quick=true` (60 s runs, 2 seeds, about 80 s) writes to `results/paper_quick/`. The output folder holds `PaperResults.pdf`, `runs.csv` (every run), LaTeX tables and `macros.tex` for the paper to `\input`, and `figures/` (PNG; the plots also as PDF).
 
 The experiments are defined in `Experiments/paper/paperDefaults.m` (the reference scenario) and `Experiments/paper/paperConditions.m` (what each experiment varies). The live script is binary, so it is built from a plain-text source: edit `Experiments/paper/paperResultsSource.m` and run `buildPaperResults`.
 

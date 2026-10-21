@@ -1,11 +1,10 @@
 function files = writePaperOutputs(outDir, S)
 % Writes the regenerated numbers for the paper into outDir:
 %   runs.csv            every run of every experiment (one row per run)
-%   comparison.csv      draft values next to the regenerated ones (if S.comparison is given)
 %   table1_parameters.tex ... table4_battery.tex   tabular environments to \input in the paper
 %   macros.tex          \newcommand values quoted in the text (prefix \pr)
 % S has fields parameters (paperTables("parameters", ...)) and policy, planner, battery
-% (paperRuns outputs), and optionally comparison (paperComparison).
+% (paperRuns outputs).
 if ~isfolder(outDir), mkdir(outDir); end
 files = fullfile(outDir, ["runs.csv", "table1_parameters.tex", "table2_policy.tex", ...
     "table3_planner.tex", "table4_battery.tex", "macros.tex"]);
@@ -14,10 +13,6 @@ runs = [addvars(S.policy.Runs, repmat("policy", height(S.policy.Runs), 1), 'Befo
         addvars(S.planner.Runs, repmat("planner", height(S.planner.Runs), 1), 'Before', 1, 'NewVariableNames', 'Experiment'); ...
         addvars(S.battery.Runs, repmat("battery", height(S.battery.Runs), 1), 'Before', 1, 'NewVariableNames', 'Experiment')];
 writetable(runs, files(1));
-if isfield(S, 'comparison') && ~isempty(S.comparison)
-    files(end+1) = fullfile(outDir, "comparison.csv");
-    writetable(S.comparison, files(end));
-end
 
 P = S.parameters;
 writeLines(files(2), tabular("|l|c|c|", ["Parameter", "Symbol", "Value"], ...
@@ -46,9 +41,9 @@ writeLines(files(5), tabular("|l|c|c|c|", ["Planner", "SOC (\%)", "Energy (J)", 
 macros = [ ...
     macro("prRuns", sprintf('%d', nS))
     macro("prJRandomWalk", sprintf('%.1f', T2.Mean(1)))
-    macro("prJBatteryEfficient", sprintf('%.1f', T2.Mean(2)))
+    macro("prJEDRHC", sprintf('%.1f', T2.Mean(2)))
     macro("prSpreadRandomWalk", sprintf('%.2f', T2.StdOverMean(1)))
-    macro("prSpreadBatteryEfficient", sprintf('%.2f', T2.StdOverMean(2)))
+    macro("prSpreadEDRHC", sprintf('%.2f', T2.StdOverMean(2)))
     macro("prPolicyReduction", sprintf('%.1f', 100 * (T2.Mean(1) - T2.Mean(2)) / T2.Mean(1)))
     macro("prPlannerChangeJ", sprintf('%+.2f', T3.J(end)))
     macro("prPlannerChangeL", sprintf('%+.2f', T3.L(end)))

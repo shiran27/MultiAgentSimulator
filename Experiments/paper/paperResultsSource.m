@@ -44,18 +44,19 @@ parameters = paperTables("parameters", base, seeds)
 %% Figs. 9 and 2: the reference scenario in the GUI
 % |Configurations/ReportLayout.mat| over the Stevens Smart Lab map: 11 targets, 10 edges,
 % 3 walls plus 89 traced from the floor plan, and 5 agents on targets 1, 6, 2, 3, and 5.
-% Fig. 9 shows it at t = 0 and Fig. 2 after a short run with the Battery Efficient policy.
+% Fig. 9 shows it at t = 0 and Fig. 2 after a short run with ED-RHC.
 showImages([paperGuiFigures("setup", figDir); paperGuiFigures("overview", figDir)]);
 
 %% Table II and Figs. 10-11: movement policies
-% Random Walk vs Battery Efficient, with the Dijkstra Corners planner and Physical Agents.
+% Random Walk vs ED-RHC, with the Dijkstra Corners planner and Physical Agents. (The draft used
+% Gabriel's Battery Efficient heuristic, retired on 2026-10-21.)
 policy = paperRuns(base, paperConditions("policy"), seeds);
 paperTables("policy", policy)
 paperPlots("objective", policy, fullfile(figDir, "fig10_objective_random_walk"), Condition="Random Walk");
-paperPlots("objective", policy, fullfile(figDir, "fig11_objective_battery_efficient"), Condition="Battery Efficient");
+paperPlots("objective", policy, fullfile(figDir, "fig11_objective_ed_rhc"), Condition="ED-RHC");
 
 %% Table III and Fig. 12: path planners
-% Dijkstra Corners vs Energy Efficient, with the Battery Efficient policy and Physical Agents.
+% Dijkstra Corners vs Energy Efficient, with ED-RHC and Physical Agents.
 % L, Theta, and E_a are summed over the five agents; all values are means over the runs.
 planner = paperRuns(base, paperConditions("planner"), seeds);
 paperTables("planner", planner)
@@ -69,35 +70,18 @@ paperTables("battery", battery)
 paperPlots("soc", battery, fullfile(figDir, "fig13_soc"));
 
 %% Fig. 3: a run in the GUI
-% |Configurations/ExampleLayout1.mat| with four Physical Agents and the Battery Efficient policy,
+% |Configurations/ExampleLayout1.mat| with four Physical Agents and ED-RHC,
 % captured at six times.
 showImages(paperGuiFigures("reel", figDir, EndTime=base.EndTime));
 
 %% Figs. 5-8: agent types and policies in the GUI
 % |ExampleLayout1.mat| after several runs, with Physical Agents and Random Walk (Figs. 5 and 7)
-% and with Physical Agents and Battery Efficient (Figs. 6 and 8).
+% and with Physical Agents and ED-RHC (Figs. 6 and 8).
 showImages(paperGuiFigures("examples", figDir, EndTime=base.EndTime, Runs=numel(seeds)));
 
-%% Check against the draft
-% The draft's numbers were produced by hand in the GUI before Random Walk and Battery
-% Efficient dwelled at targets. Running the three experiments again with the dwell set to zero
-% recreates those conditions, so the |DraftConditions| column should be close to |Draft|
-% (Random Walk varies from run to run). |Current| holds the results above. The check needs the
-% draft's 500-s runs, so QuickMode skips it.
-comparison = table();
-if QuickMode
-    disp("Skipped in QuickMode.")
-else
-    draft.policy = paperRuns(base, paperConditions("policy", NoDwell=true), seeds);
-    draft.planner = paperRuns(base, paperConditions("planner", NoDwell=true), seeds);
-    draft.battery = paperRuns(base, paperConditions("battery", NoDwell=true), seeds);
-    current = struct('policy', policy, 'planner', planner, 'battery', battery);
-    comparison = paperComparison(current, draft)
-end
-
 %% Output files
-% |runs.csv| (every run), |comparison.csv|, LaTeX tables and macros for the paper, and the
+% |runs.csv| (every run), LaTeX tables and macros for the paper, and the
 % figures (PNG; the plots also as PDF) in |figures/|.
 files = writePaperOutputs(outDir, struct('parameters', parameters, 'policy', policy, ...
-    'planner', planner, 'battery', battery, 'comparison', comparison))
+    'planner', planner, 'battery', battery))
 writelines("Finished " + string(datetime("now")), fullfile(outDir, "finished.txt"));   % read by exportPaperResults

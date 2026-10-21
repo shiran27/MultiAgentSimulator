@@ -50,7 +50,7 @@ agent = PhysicalAgent(1, [0 0], base.AgentSpeed);
 ctrl = TrackingController();
 bat = Battery();
 rw = RandomWalkPolicy();
-be = BatteryEfficientPolicy();
+ed = EDRHCPolicy();
 rows = {
     "Simulation duration",                 "T",            sprintf('%g s', base.EndTime)
     "Time step",                           "dt",           sprintf('%g s', base.Dt)
@@ -66,7 +66,8 @@ rows = {
     "PD gains",                            "K_p, K_d",     sprintf('%g, %g', ctrl.kp, ctrl.kd)
     "Turn penalty (energy-efficient planner)", "kappa",    sprintf('%g', EnergyEfficientPlanner().turnPenalty)
     "Dwell, random walk",                  "tau_dwell",    sprintf('U(%g, %g) x time to empty the target', rw.dwellScale * (1 - rw.dwellSpread), rw.dwellScale * (1 + rw.dwellSpread))
-    "Dwell, battery efficient",            "tau_dwell",    sprintf('U(%g, %g) s; U(%g, %g) s below %g%% SOC', be.dwellRange, be.lowBatteryDwellRange, be.criticalBatteryThreshold)
+    "Planning horizon (ED-RHC)",           "H",            sprintf('%g s', ed.H)
+    "Next-target weight (ED-RHC)",         "alpha",        sprintf('1/|N_i|^2 (%s)', ed.alpha)
     "Motion power",                        "P_0, alpha, gamma", sprintf('%g W, %.4g, %g', bat.P0, bat.alphaVel, bat.gammaAcc)
     "Processor power (moving, idle)",      "P_cpu",        sprintf('%g W, %g W', bat.cpuMove, bat.cpuIdle)
     "Communication power (active, standby)", "P_comp",     sprintf('%g W, %g W', bat.commActive, bat.commStandby)

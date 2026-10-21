@@ -5,8 +5,8 @@ function files = paperGuiFigures(kind, outDir, opts)
 %   "setup"     Fig. 9: main window, reference scenario at t = 0
 %   "planners"  Fig. 12: canvas of the reference scenario under each path planner
 %   "reel"      Fig. 3: canvas snapshots of a run on ExampleLayout1 at six times
-%   "examples"  Figs. 5-8: ExampleLayout1 after several runs, with Default agents (Random Walk)
-%               and with Energy agents (Battery Efficient): canvas and objective window
+%   "examples"  Figs. 5-8: ExampleLayout1 after several runs, with Physical Agents under Random
+%               Walk and under ED-RHC: canvas and objective window
 % Every action goes through the same callbacks as the GUI controls.
 arguments
     kind (1,1) string
@@ -55,7 +55,7 @@ end
 end
 
 function files = reel(root, outDir, opts)
-ui = openExample(root, opts, 'Physical Agent', 'Battery Efficient');
+ui = openExample(root, opts, 'Physical Agent', 'ED-RHC');
 cleanup = onCleanup(@() closeUI(ui));
 times = round(linspace(0, opts.EndTime, 6));
 files = fullfile(outDir, compose("fig03_reel_t%03d.png", times'));
@@ -71,7 +71,7 @@ end
 
 function files = examples(root, outDir, opts)
 % agent type, policy, file tag, figure numbers (layout, objective)
-cases = {'Physical Agent', 'Random Walk', 'default', [5 7]; 'Physical Agent', 'Battery Efficient', 'energy', [6 8]};
+cases = {'Physical Agent', 'Random Walk', 'random_walk', [5 7]; 'Physical Agent', 'ED-RHC', 'ed_rhc', [6 8]};
 files = strings(0, 1);
 for c = 1:size(cases, 1)
     ui = openExample(root, opts, cases{c, 1}, cases{c, 2});
@@ -94,7 +94,7 @@ function ui = openReference(root, opts)
 % Reference scenario over the Stevens Smart Lab map, components as in Sec. IV
 ui = MainUI('Monitor', opts.Monitor);
 ui.loadLayout(fullfile(root, 'Configurations', 'ReportLayout.mat'));
-choose(ui.policyDropdown, 'Battery Efficient');
+choose(ui.policyDropdown, 'ED-RHC');
 end
 
 function ui = openExample(root, opts, agentType, policy)

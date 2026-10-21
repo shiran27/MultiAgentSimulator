@@ -68,19 +68,16 @@ classdef guiTest < matlab.uitest.TestCase
 
         function guiAndHeadlessRunsAgree(tc)
             % The same scenario run through the GUI and through runTrial gives the same J(T).
-            % Battery Efficient without its dwell is deterministic.
+            % ED-RHC is deterministic.
             T = 60;
             p = paperDefaults();
             tc.choose(tc.ui.agentTypeDropdown, char(p.AgentType));   % same agents as runTrial
             tc.ui.loadLayout(fullfile(tc.root, 'Configurations', 'ReportLayout.mat'));
-            tc.choose(tc.ui.policyDropdown, 'Battery Efficient');
-            pol = tc.ui.model.policyMap('Battery Efficient');
-            pol.dwellRange = [0 0];
+            tc.choose(tc.ui.policyDropdown, 'ED-RHC');
             tc.type(tc.ui.endTimeField, T);
             tc.press(button(tc, 'Run to End'));
             Jgui = tc.ui.model.cumUncertaintyIntegral / tc.ui.clock.currentTime;
             p.EndTime = T;
-            p.Policy_dwellRange = [0 0];
             p.Log = false;
             out = runTrial(p);
             tc.verifyEqual(Jgui, out.finalJ, 'RelTol', 1e-12);
