@@ -16,6 +16,8 @@ function smokeTest()
 %    only agents at rest service targets; physical agents keep pace on wall-routed edges; the
 %    heading turns smoothly on curved paths; William's Joint RHC harness (runTrial defaults with
 %    'Linear Agent') runs.
+% 6. Scenarios (scenarioCatalog): each loads (with its background image, if any) and runs 10 s
+%    under every policy with Abstract Agents, and under Random Walk with Physical Agents.
 % Prints one line per check and errors at the end (non-zero exit under -batch) if any failed.
 
 root = fileparts(fileparts(mfilename('fullpath')));
@@ -178,6 +180,28 @@ catch err
     check(false, "runTrial defaults  ERROR " + err.message);
 end
 
+% ---- 6. Scenarios ----
+warnState = warning('off', 'runTrial:AgentPolicyFit');
+cat = scenarioCatalog();
+for k = 1:height(cat)
+    tmp = load(cat.File(k), 's'); sc = tmp.s;
+    if isfield(sc, 'background') && strlength(string(sc.background)) > 0
+        check(ScenarioModel.backgroundFile(sc.background) ~= "", sprintf('scenario "%s": background %s found', cat.Name(k), sc.background));
+    end
+    mapScenario = ~startsWith(cat.Name(k), "JS:");
+    if mapScenario, pols = policies; else, pols = {'ED-RHC'}; end
+    combos = [pols(:), repmat({'Abstract Agent'}, numel(pols), 1)];
+    if mapScenario, combos(end+1, :) = {'Random Walk', 'Physical Agent'}; end %#ok<AGROW>
+    bad = strings(0, 1);
+    for c = 1:size(combos, 1)
+        [ok, detail] = runScenario(@() scenarioModel(sc, combos{c, 2}), combos{c, 1}, 10, false);
+        if ~ok, bad(end+1) = combos{c, 1} + " / " + combos{c, 2} + ": " + detail; end %#ok<AGROW>
+    end
+    check(isempty(bad), sprintf('scenario "%s": %d policy/agent runs%s', cat.Name(k), size(combos, 1), ...
+        join([""; bad], newline + "      ")));
+end
+warning(warnState);
+
 if isempty(failures)
     fprintf('\nsmokeTest PASSED: %d checks\n', nChecks);
 else
@@ -222,6 +246,13 @@ end
             ok = false;
             detail = sprintf('ERROR %s (%s, line %d)', err.message, err.stack(1).name, err.stack(1).line);
         end
+    end
+
+    function sim = scenarioModel(sc, typeName)
+        % A scenario layout with agents of typeName
+        sim = ScenarioModel();
+        sim.setAgentType(typeName);
+        sim.importLayout(sc);
     end
 
     function sim = reportScenario(plannerName, typeNames)

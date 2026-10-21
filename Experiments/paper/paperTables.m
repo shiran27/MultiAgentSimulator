@@ -47,7 +47,8 @@ function T = parameterTable(base, seeds)
 tmp = load(fullfile(fileparts(which('MainUI')), 'Configurations', char(base.Layout)), 's');
 s = tmp.s;
 agent = PhysicalAgent(1, [0 0], base.AgentSpeed);
-ctrl = PathFollowerController();
+ctrl = TrackingController();
+bat = Battery();
 rw = RandomWalkPolicy();
 be = BatteryEfficientPolicy();
 rows = {
@@ -66,11 +67,11 @@ rows = {
     "Turn penalty (energy-efficient planner)", "kappa",    sprintf('%g', EnergyEfficientPlanner().turnPenalty)
     "Dwell, random walk",                  "tau_dwell",    sprintf('U(%g, %g) x time to empty the target', rw.dwellScale * (1 - rw.dwellSpread), rw.dwellScale * (1 + rw.dwellSpread))
     "Dwell, battery efficient",            "tau_dwell",    sprintf('U(%g, %g) s; U(%g, %g) s below %g%% SOC', be.dwellRange, be.lowBatteryDwellRange, be.criticalBatteryThreshold)
-    "Motion power",                        "P_0, alpha, gamma", sprintf('%g W, %.4g, %g', Agent.P0_BASE_MOTION, Agent.ALPHA_VEL, Agent.GAMMA_ACC)
-    "Processor power (moving, idle)",      "P_cpu",        sprintf('%g W, %g W', Agent.CPU_MOVE, Agent.CPU_IDLE)
-    "Communication power (active, standby)", "P_comp",     sprintf('%g W, %g W', Agent.COMP_ACTIVE, Agent.COMP_STANDBY)
-    "Converter efficiency",                "eta_conv",     sprintf('%g', Agent.ETA_CONV)
-    "Battery capacity",                    "Q",            sprintf('%g Wh (%g J)', Agent.BATTERY_E_Wh, 3600 * Agent.BATTERY_E_Wh)
+    "Motion power",                        "P_0, alpha, gamma", sprintf('%g W, %.4g, %g', bat.P0, bat.alphaVel, bat.gammaAcc)
+    "Processor power (moving, idle)",      "P_cpu",        sprintf('%g W, %g W', bat.cpuMove, bat.cpuIdle)
+    "Communication power (active, standby)", "P_comp",     sprintf('%g W, %g W', bat.commActive, bat.commStandby)
+    "Converter efficiency",                "eta_conv",     sprintf('%g', bat.eta)
+    "Battery capacity",                    "Q",            sprintf('%g Wh (%g J)', bat.capacityWh, 3600 * bat.capacityWh)
     "Runs per condition (seeds)",          "",             sprintf('%d (%s)', numel(seeds), strjoin(string(seeds), ', '))
     };
 T = cell2table(rows, 'VariableNames', {'Parameter', 'Symbol', 'Value'});

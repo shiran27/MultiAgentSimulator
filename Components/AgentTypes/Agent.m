@@ -12,12 +12,14 @@ classdef (Abstract) Agent < handle & matlab.mixin.Heterogeneous
     %     otherwise the agent uses its own profile with peak speed maxSpeed
     %   - energy metrics: Je = int |u|^2 dt (NaN once a "constant" transit is used: its
     %     impulsive accelerations make it undefined), peak speed and acceleration
-    %   - a battery (power model below), reported as SOC (about an hour of operation on the
-    %     default 26 Wh); with stopWhenEmpty = true the agent stops when it is empty
+    %   - a battery (Battery: capacity and power model), reported as SOC (about an hour of
+    %     operation on the default 26 Wh); with stopWhenEmpty = true the agent stops when it is
+    %     empty
+    % Agents are spawned from an AgentSpec (type and settings): see ScenarioModel.agentSpec.
     properties
         index
         state                       % KinematicState
-        controller                  % PathFollowerController (feedback law of PhysicalAgent)
+        controller                  % TrackingController (feedback law of PhysicalAgent)
         path = []                   % N x 2 waypoints to the destination target
         pathIndex = 1
         current_target_idx = []     % destination target, or the target the agent is at
@@ -35,9 +37,7 @@ classdef (Abstract) Agent < handle & matlab.mixin.Heterogeneous
         peakAccel = 0               % largest |acceleration| so far
 
         mode string = "idle"        % "idle", "traveling" or "power_outage" (battery)
-        e_total = 0                 % energy drawn from the battery so far [J]
-        soc = 1.0                   % battery state of charge
-        battery_percentage = 100
+        battery                     % Battery (capacity, power model, energy drawn)
         stopWhenEmpty = false       % true: stop moving when the battery is empty (default:
                                     % the battery is only reported, as in the RHC papers)
 
@@ -49,20 +49,10 @@ classdef (Abstract) Agent < handle & matlab.mixin.Heterogeneous
         ax
     end
 
-    properties (Constant)
-        % Battery power model: P = (P_cpu + P_comp + P0 + ALPHA_VEL |v| + GAMMA_ACC |a|^2) / ETA_CONV
-        MASS = 10.0;
-        ROLLING_FRICTION = 0.02;
-        GRAVITY = 9.81;
-        P0_BASE_MOTION = 5.82;
-        ALPHA_VEL = 0.02 * 10 * 9.81;
-        GAMMA_ACC = 0.5;
-        CPU_MOVE = 5.5;
-        CPU_IDLE = 4.0;
-        COMP_ACTIVE = 11.7;
-        COMP_STANDBY = 11.0;
-        BATTERY_E_Wh = 26.0;
-        ETA_CONV = 0.90;
+    properties (Dependent)
+        e_total                     % energy drawn from the battery so far [J]
+        soc                         % battery state of charge
+        battery_percentage
     end
 
     methods (Abstract)
@@ -74,7 +64,8 @@ classdef (Abstract) Agent < handle & matlab.mixin.Heterogeneous
             obj.index = index;
             obj.initialPosition = position(:)';
             obj.state = KinematicState(obj.initialPosition, maxSpeed, 15);
-            obj.controller = PathFollowerController();
+            obj.controller = TrackingController();
+            obj.battery = Battery();
         end
 
         function resetToInitial(obj)
@@ -92,10 +83,12 @@ classdef (Abstract) Agent < handle & matlab.mixin.Heterogeneous
             obj.peakSpeed = 0;
             obj.peakAccel = 0;
             obj.mode = "idle";
-            obj.e_total = 0;
-            obj.soc = 1.0;
-            obj.battery_percentage = 100;
+            obj.battery.reset();
         end
+
+        function e = get.e_total(obj), e = obj.battery.energyUsed; end
+        function s = get.soc(obj), s = obj.battery.soc; end
+        function p = get.battery_percentage(obj), p = obj.battery.percentage; end
 
         function set.profile(obj, p)
             assert(any(p == SpeedProfile.names), 'Agent:Profile', ...
@@ -128,18 +121,7 @@ classdef (Abstract) Agent < handle & matlab.mixin.Heterogeneous
 
         function calculate_energy(obj, dt)
             % Battery drain over dt from the current speed, acceleration and mode
-            v_norm = norm(obj.state.vel);
-            a_norm = norm(obj.state.acc);
-            p_mot = obj.P0_BASE_MOTION + (obj.ALPHA_VEL * v_norm) + (obj.GAMMA_ACC * a_norm^2);
-            if obj.mode == "traveling"
-                p_cpu = obj.CPU_MOVE; p_comp = obj.COMP_ACTIVE;
-            else
-                p_cpu = obj.CPU_IDLE; p_comp = obj.COMP_STANDBY;
-            end
-            energy_step = (p_cpu + p_comp + p_mot) / obj.ETA_CONV * dt;
-            obj.e_total = obj.e_total + energy_step;
-            obj.soc = obj.soc - energy_step / (obj.BATTERY_E_Wh * 3600);
-            obj.battery_percentage = max(0, obj.soc * 100);
+            obj.battery.drain(norm(obj.state.vel), norm(obj.state.acc), obj.mode == "traveling", dt);
         end
     end
 

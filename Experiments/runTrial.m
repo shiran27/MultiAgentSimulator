@@ -4,9 +4,11 @@ function out = runTrial(params)
 % (Experiments/paper). Parameters: see trialDefaults. With params.Log = true the output also
 % holds out.log (per-step time, J(t), target uncertainties R, agent states, SOC and energy) and out.metrics
 % (trialMetrics: path length, heading change, acceleration cost, final SOC per agent). out also
-% holds the energy-aware RHC metrics Je, JT, vmax and umax. Parameters named Agent_<property>
-% set that property on every agent (or on its state or controller), e.g. 'Agent_profile', "SO",
-% 'Agent_maxAccel', 10, 'Agent_kp', 16.
+% holds the energy-aware RHC metrics Je, JT, vmax and umax. Agents are spawned from one
+% AgentSpec: AgentType, AgentSpeed, and Agent_<setting> for the spec's settings (e.g.
+% 'Agent_profile', "SO", 'Agent_maxAccel', 10, 'Agent_kp', 16, 'Agent_batteryWh', 50); any other
+% Agent_<property> is set on every agent (or its state or controller). A warning says when the
+% agents do not suit the policy (ScenarioModel.checkAgentFit).
 
 p = withDefaults(params);
 root = fileparts(fileparts(mfilename('fullpath')));
@@ -42,16 +44,24 @@ if isempty(starts)
 end
 assert(all(starts >= 1 & starts <= nT & starts == round(starts)), ...
     'AgentStarts %s must be target indices 1..%d of %s', mat2str(starts), nT, char(p.Layout));
+% One spec for every agent: the type, AgentSpeed, and the Agent_<setting> parameters
+spec = AgentSpec(Type=string(p.AgentType), MaxSpeed=p.AgentSpeed);
+f = fieldnames(p);
+for i = 1:numel(f)
+    if startsWith(f{i}, 'Agent_') && ismember(extractAfter(f{i}, 'Agent_'), AgentSpec.settings)
+        spec.(extractAfter(f{i}, 'Agent_')) = p.(f{i});
+    end
+end
+model.agentSpec = spec;
 for k = 1:p.NumAgents
-    model.addAgentOnTarget(model.targets(starts(k)).position, p.AgentSpeed, 1e-6);
+    model.addAgentOnTarget(model.targets(starts(k)).position, spec.maxSpeed, 1e-6);
 end
 
 model.setActivePolicy(char(p.Policy));
 
-% Parameters named Agent_<property> set that property on every agent, its state or controller
-f = fieldnames(p);
+% Other Agent_<property> parameters set that property on every agent, its state or controller
 for i = 1:numel(f)
-    if startsWith(f{i}, 'Agent_')
+    if startsWith(f{i}, 'Agent_') && ~ismember(extractAfter(f{i}, 'Agent_'), AgentSpec.settings)
         name = extractAfter(f{i}, 'Agent_');
         for a = model.agents
             if isprop(a, name), a.(name) = p.(f{i});
@@ -86,6 +96,8 @@ if isfield(p, 'EnergyBeta') && isprop(pol, 'energyWeight')
     pol.energyWeight = EDRHCPolicy.weightFromBeta(p.EnergyBeta, model, bound);
 end
 model.setUncertaintyMode(char(p.UncertaintyMode));
+fit = model.checkAgentFit();
+if fit ~= "", warning('runTrial:AgentPolicyFit', '%s', fit); end
 model.resetSimulationState();  % also clears RHC reservation tables from earlier trials
 if p.Seed >= 0, rng(p.Seed); end   % -1 (the default) keeps the caller's rng state
 

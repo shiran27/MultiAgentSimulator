@@ -5,6 +5,10 @@ classdef BatteryEfficientPolicy < handle
         lowBatteryDwellRange = [5 10]   % dwell when the battery is below the threshold
     end
 
+    properties (Constant)
+        agentAssumption = "any"   % what it assumes of the agents' motion (see ComponentRegistry.assumptionOf)
+    end
+
     methods
         function cmd = plan(obj, agent, model, adj, curIdx, simTime) %#ok<INUSD>
             cmd = struct(); % default empty

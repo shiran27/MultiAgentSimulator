@@ -39,8 +39,22 @@ The objective function `J(t)` tracked over the course of a run.
    ```
    This adds all subfolders to the path and opens the UI. `runMainUI('Monitor', 2)` opens the windows on
    another monitor (a row of `get(groot, 'MonitorPositions')`), sized to fit it.
-3. Use the dropdowns in the **Tools** panel to pick a Path Planner, Agent Policy, Agent Type, and Uncertainty mode. These can only be changed while the simulation is **not** running.
+3. Pick a ready-made scenario from the **Scenario** dropdown (see [Scenarios](#scenarios)), or build your own. Use the dropdowns in the **Tools** panel to pick a Path Planner, Agent Policy, Agent Type, and Uncertainty mode. These can only be changed while the simulation is **not** running.
 4. Use the **Tools** panel to add targets, agents, edges, and walls. **Agent Speed**, **Agent Accel** and **Speed Profile** set the next agents you place (see [Agent types](#agent-types)). Use the **Time Control** panel to play/pause the simulation.
+
+## Scenarios
+
+The **Scenario** dropdown (top of the Tools panel; `MainUI.loadScenario(name)` in code) loads a ready-made scenario in one click: background map, targets, edges, walls and agents. The agents take the selected **Agent Type**, so every scenario runs with either agent type and any policy. When the agents do not suit the policy (see the compatibility table below), the status line says what to expect.
+
+| Scenario | Layout | What it is |
+|---|---|---|
+| Lab floor (Stevens) | `ReportLayout.mat` | Stevens lab floor plan; 11 targets, 5 agents; the simulator paper's reference scenario |
+| City blocks | `CityBlocks.mat` | Street grid: eight city blocks (obstacles) around a park (open), a river promenade; 11 sites, 4 agents |
+| Harbor patrol | `HarborPatrol.mat` | Coast with a port, piers and a breakwater, two islands; 12 buoys and berths, 3 boats |
+| Campus | `Campus.mat` | Zoomed-out building complex: six buildings and a pond (obstacles), quad, parking; 11 sites, 5 agents |
+| JS: ... | `Legacy/JS_*.mat` | The eight presets of the legacy JS simulator (RHC papers), scaled to the canvas |
+
+`Configurations/scenarioCatalog.m` lists them. `Configurations/makeScenarioLayouts.m` draws the maps (`Configurations/backgrounds/*.png`) and writes their layouts from the same geometry, so walls line up with the drawn buildings, coasts and piers. Edit it to change a scenario, or add a row to the catalog for a new layout file.
 
 ## Target uncertainty and defaults
 
@@ -72,6 +86,7 @@ The experiment harness (`Experiments/runTrial`, `Experiments/trialDefaults.m`) s
 | `agentSpeed` | maximum speed of each agent (or one value for all) |
 | `agentAccel` | maximum acceleration of each agent (or one value for all) |
 | `agentProfile` | speed profile of each agent: `"constant"`, `"SO"` or `"FO"` |
+| `background` | background image (a file in `Configurations/backgrounds/`, the project root, or a full path) |
 | `uncertaintyMode` | one of the modes above |
 | `A`, `B`, `R0` | per-target `A_i`, `B_i`, `R_i(0)` (`n x 1`, or one value for all) |
 
@@ -111,18 +126,39 @@ There are two agent types (`Components/AgentTypes/`): the **Abstract Agent**, an
 
 Without a planned transit time an agent crosses an edge of length `y` in `y/maxSpeed` (`"constant"`) or `1.5 y/maxSpeed` (`"SO"`, `"FO"`, peak speed `maxSpeed`). On curved paths the profile depends on the path length only; the heading follows the path and turns at `omega = kappa * v` (`state.omega`), as in Theorem 2 of the energy-aware paper.
 
-**Customizing.**
-- **In the GUI:** **Agent Type**, **Agent Speed**, **Agent Accel** and **Speed Profile** apply to the next agents placed. They are stored per agent in saved layouts.
+**Spawning and customizing.** Agents are spawned from an `AgentSpec` (`Components/AgentTypes/AgentSpec.m`):
+- the type (a registered name);
+- `maxSpeed`, `maxAccel`;
+- `profile`;
+- the tracking gains `kp` and `kd` (Physical Agents);
+- `batteryWh`.
+
+Unset settings keep the type's defaults. One spec serves every place that creates agents:
+- **In the GUI:** **Agent Type**, **Agent Speed**, **Agent Accel** and **Speed Profile** form `ScenarioModel.agentSpec`, applied to the next agents placed.
+- **Layouts:** a layout stores each agent's speed, acceleration and profile. The type is always the current selection.
 - **In `runTrial`:**
   - `AgentType` and `AgentSpeed` set the type and speed.
-  - `Agent_<property>` sets any agent, state or controller property on every agent, e.g. `'Agent_profile', "SO"`, `'Agent_maxAccel', 10`, `'Agent_kp', 16`, `'Agent_kd', 8`, `'Agent_stopWhenEmpty', true`.
-- **In code:** set `profile`, `state.maxSpeed`, `state.maxAccel`, `controller.kp` / `kd` / `arrivePosTol` on the agent object.
+  - `Agent_<setting>` sets a spec setting (`'Agent_profile', "SO"`, `'Agent_maxAccel', 10`, `'Agent_kp', 16`, `'Agent_batteryWh', 50`).
+  - Any other `Agent_<property>` is set on every agent, its state or controller (e.g. `'Agent_stopWhenEmpty', true`).
+- **In code:** `spec = AgentSpec(Type="Physical Agent", MaxSpeed=10, Profile="SO"); agent = spec.spawn(index, position)`.
+
+**Parts held by every agent, swappable without subclassing:**
+- **Speed profile** (`SpeedProfile`): chosen per transit by a planning policy, or the agent's own `profile`.
+- **Controller** (`TrackingController`): PD tracking with feedforward. Physical Agents use it; replace `agent.controller` to try another law.
+- **Battery** (`Battery`): capacity and power model, `agent.battery`. Reported as SOC; with `stopWhenEmpty` the agent stops when it is empty.
+
+New agent types are subclasses for different platforms (dynamics, limits, sensing), not for profiles; see [New Agent Type](#3-new-agent-type).
 
 **Service.** A target is serviced only by agents at rest there: arrived (no path) or waiting to leave. Agents in transit service nothing, even when they pass close to a target. `ScenarioModel.detectionRadius` (1.2) is only the tolerance for "at the target".
 
 **Older names.** `"Linear Agent"` (= Abstract, `"constant"`), `"Second-Order Agent"` (= Abstract, `"SO"`), `"Default Agent"` and `"Energy Agent"` (= Physical) still work in scripts and layouts, but are not listed in the GUI.
 
-**Policies and agent types.**
+**Policies and agent types.** Each policy states what it assumes of the agents' motion: `agentAssumption` on the policy, or `ComponentRegistry.assumptions` for policies that do not declare it.
+- `"any"`: no timing assumption.
+- `"plans transit"`: hands each transit's time (and profile) to the agent.
+- `"constant speed"`: transit = path length / `maxSpeed`, not handed over.
+
+`ScenarioModel.checkAgentFit` turns this into a note in the GUI status line and a warning in `runTrial`.
 - ✓ = works as designed.
 - ≈ = runs, but the agent's transit times differ from what the policy plans.
 
@@ -292,7 +328,7 @@ end
 `Agent` holds what every agent shares:
 - the state (`state`, a `KinematicState`), `path`, `dwellRemaining` and the start target;
 - the speed `profile` and the transit plan a policy may hand over (`transitTime`, `transitProfile`, `transitLimits`);
-- the battery (`calculate_energy`, `soc`) and the metrics `Je`, `peakSpeed`, `peakAccel`;
+- the battery (`battery`, a `Battery`; `soc`, `e_total`) and the metrics `Je`, `peakSpeed`, `peakAccel`;
 - `resetToInitial`, `draw` and `updateVisuals`.
 
 Helpers for path-following agents:

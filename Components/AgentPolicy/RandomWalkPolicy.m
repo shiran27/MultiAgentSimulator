@@ -13,6 +13,10 @@ classdef RandomWalkPolicy < handle
         dwellScale = 1      % mean dwell as a multiple of the time to empty (0 = no dwell)
     end
 
+    properties (Constant)
+        agentAssumption = "any"   % what it assumes of the agents' motion (see ComponentRegistry.assumptionOf)
+    end
+
     properties (Access = private)
         dwelt               % agent index -> true once the dwell at its current target is decided
     end

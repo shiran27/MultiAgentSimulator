@@ -15,12 +15,26 @@ classdef ScenarioModel < handle
         agentFactory
         bounds = [0 100 0 100]  % [xMin xMax yMin yMax]
         detectionRadius = 1.2   % an agent at rest (not in transit) this close to a target services it
-        agentAccel = 15         % maxAccel of agents added next
-        agentProfile = "constant"   % speed profile of agents added next ("constant", "SO", "FO")
+        agentSpec = AgentSpec() % spec (settings) of the agents added next; the type is agentFactory
+        background = ""         % background image of the layout (file name; see backgroundFile)
+        registry                % ComponentRegistry (policy assumptions)
     end
 
     properties (Constant)
         UncertaintyModes = {'Static Uniform', 'Static Priority Target', 'Dynamic Uncertainty'}
+    end
+
+    methods (Static)
+        function f = backgroundFile(name)
+            % Full path of a layout's background image: a file in Configurations/backgrounds/,
+            % in the project root, or a full path ("" when there is none)
+            f = "";
+            if strlength(string(name)) == 0, return; end
+            root = fileparts(fileparts(mfilename('fullpath')));
+            for c = [fullfile(root, 'Configurations', 'backgrounds', name), fullfile(root, name), string(name)]
+                if isfile(c), f = string(c); return; end
+            end
+        end
     end
 
     properties (Dependent)
@@ -38,6 +52,7 @@ classdef ScenarioModel < handle
 
             % One instance per registered policy, kept for the model's lifetime
             reg = ComponentRegistry();
+            obj.registry = reg;
             obj.policyMap = containers.Map('KeyType','char','ValueType','any');
             names = reg.keysFor('policy');
             for k = 1:numel(names)
@@ -57,6 +72,39 @@ classdef ScenarioModel < handle
 
         function setAgentFactory(obj, factory)
             obj.agentFactory = factory;
+        end
+
+        function setAgentType(obj, name)
+            % The registered agent type of the agents added next
+            obj.agentFactory = obj.registry.factoryFor('agenttype', char(name));
+            obj.agentSpec.type = string(name);
+        end
+
+        function msg = checkAgentFit(obj)
+            % "" when the agents suit the active policy, else a note on what to expect
+            msg = "";
+            if isempty(obj.agents), return; end
+            name = string(obj.activePolicy);
+            assumption = obj.registry.assumptionOf(name, obj.policy);
+            physical = arrayfun(@(a) isa(a, 'PhysicalAgent'), obj.agents);
+            shaped = arrayfun(@(a) ~isa(a, 'PhysicalAgent') && a.profile ~= "constant", obj.agents);
+            switch assumption
+                case "constant speed"
+                    if any(shaped)
+                        msg = name + " plans transits as path length / speed; agents with SO or FO profiles take 1.5x longer than planned.";
+                    end
+                    if any(physical)
+                        msg = strtrim(msg + " " + name + " assumes constant-speed agents; physical agents lag behind its plans.");
+                    end
+                case "plans transit"
+                    if any(physical)
+                        msg = name + " hands each transit's plan to the agents; physical agents track it with some lag.";
+                    end
+            end
+            n = obj.registry.requiredAgents(name);
+            if n > 0 && numel(obj.agents) ~= n
+                msg = strtrim(msg + " " + sprintf("%s is built for exactly %d agents (this scenario has %d).", name, n, numel(obj.agents)));
+            end
         end
 
         function setUncertaintyMode(obj, mode)
@@ -220,6 +268,7 @@ classdef ScenarioModel < handle
             s.agentSpeed = arrayfun(@(a) a.state.maxSpeed, obj.agents);      % max speed per agent
             s.agentAccel = arrayfun(@(a) a.state.maxAccel, obj.agents);      % max acceleration per agent
             s.agentProfile = arrayfun(@(a) a.profile, obj.agents);           % speed profile per agent
+            s.background = obj.background;                                    % background image file
             s.uncertaintyMode = obj.uncertaintyMode;
             s.A = [obj.targets.A_uniformBase].';   % base growth rate A_i per target
             s.B = [obj.targets.B].';               % decay rate B_i per agent, per target
@@ -239,15 +288,19 @@ classdef ScenarioModel < handle
                 obj.addEdgeByTargets(double(s.edges(k,1)), double(s.edges(k,2)));
             end
             if isfield(s, 'uncertaintyMode'), obj.setUncertaintyMode(s.uncertaintyMode); end
+            obj.background = "";
+            if isfield(s, 'background'), obj.background = string(s.background); end
             if isfield(s, 'agentStarts')
                 for k = 1:numel(s.agentStarts)
+                    % each agent: the current type and spec, with the layout's stored settings
+                    spec = obj.agentSpec;
                     speed = layoutValue(s, 'agentSpeed', k);
-                    if isempty(speed), speed = 15; end   % GUI default speed
-                    a = obj.addAgentOnTarget(obj.targets(s.agentStarts(k)).position, speed, 1e-6);
+                    if ~isempty(speed), spec.maxSpeed = speed; end
                     accel = layoutValue(s, 'agentAccel', k);
-                    if ~isempty(accel), a.state.maxAccel = accel; end
+                    if ~isempty(accel), spec.maxAccel = accel; end
                     prof = layoutValue(s, 'agentProfile', k);
-                    if ~isempty(prof), a.profile = prof; end
+                    if ~isempty(prof), spec.profile = prof; end
+                    obj.addAgentOnTarget(obj.targets(s.agentStarts(k)).position, spec.maxSpeed, 1e-6, spec);
                 end
             end
         end
@@ -257,13 +310,15 @@ classdef ScenarioModel < handle
             obj.targets(end+1) = t;
         end
 
-        function [a, ok, msg] = addAgentOnTarget(obj, clickPos, speed, tol)
+        function [a, ok, msg] = addAgentOnTarget(obj, clickPos, speed, tol, spec)
+            % A new agent on the target nearest clickPos, of the current type, with spec
+            % (default: agentSpec) and maximum speed speed
             a = []; ok = false; msg = "";
             [tIdx, dist] = obj.findNearestTarget(clickPos);
             if isempty(tIdx) || dist > tol, msg = "Click near target"; return; end
-            a = obj.agentFactory(numel(obj.agents)+1, obj.targets(tIdx).position, speed);
-            a.state.maxAccel = obj.agentAccel;
-            a.profile = obj.agentProfile;
+            if nargin < 5, spec = obj.agentSpec; end
+            spec.maxSpeed = speed;
+            a = spec.spawn(numel(obj.agents)+1, obj.targets(tIdx).position, obj.agentFactory);
             a.current_target_idx = tIdx;
             a.initialTargetIdx = tIdx;
             a.initialPosition = a.state.pos;

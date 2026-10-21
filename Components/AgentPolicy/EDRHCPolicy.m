@@ -74,6 +74,10 @@ classdef EDRHCPolicy < handle
         options              % fmincon options
     end
 
+    properties (Constant)
+        agentAssumption = "plans transit"   % what it assumes of the agents' motion (see ComponentRegistry.assumptionOf)
+    end
+
     properties (Constant, Access = private)
         tol = 1e-6
         minTransit = 0.1     % shortest rho_ij searched, as a fraction of y_ij / maxSpeed

@@ -30,7 +30,9 @@ classdef GraphEditController < handle
         end
 
         function importBackground(obj)
-            obj.renderer.loadBackgroundImage();
+            file = obj.renderer.loadBackgroundImage();
+            if file == "", return; end
+            obj.model.background = string(file);   % saved with the layout
             obj.say("Background image loaded.");
         end
 

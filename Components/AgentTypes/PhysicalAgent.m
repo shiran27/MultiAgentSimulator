@@ -1,7 +1,7 @@
 classdef PhysicalAgent < Agent
     % Physical agent (the counterpart of the idealized AbstractAgent): a second-order
     % (double-integrator) agent that tracks its planned
-    % motion with a PD law (PathFollowerController) under speed and acceleration saturation
+    % motion with a PD law (TrackingController) under speed and acceleration saturation
     % (maxSpeed, maxAccel; PhysicalIntegrator). The reference point moves along the path with the
     % same speed profile an AbstractAgent would follow ("constant", "SO" or "FO", or the
     % one an energy-aware policy hands over), so the agent keeps the planned pace, but lags and

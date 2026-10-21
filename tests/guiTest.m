@@ -168,6 +168,23 @@ classdef guiTest < matlab.uitest.TestCase
             tc.verifyEqual(tc.ui.clock.currentTime, 5, 'AbsTol', 1e-9, 'run finished without error');
         end
 
+        function loadsEveryScenario(tc)
+            % One click on the Scenario dropdown loads the map, targets, edges, walls and agents
+            cat = scenarioCatalog();
+            for name = cat.Name(~startsWith(cat.Name, "JS:"))'
+                tc.choose(tc.ui.scenarioDropdown, char(name));
+                tmp = load(cat.File(cat.Name == name), 's');
+                m = tc.ui.model;
+                tc.verifyEqual(numel(m.targets), size(tmp.s.targets, 1), name + ": targets");
+                tc.verifyEqual(numel(m.agents), numel(tmp.s.agentStarts), name + ": agents");
+                tc.verifyTrue(isgraphics(tc.ui.renderer.bgImageHandle), name + ": background shown");
+                tc.type(tc.ui.endTimeField, 3);
+                tc.press(button(tc, 'Run to End'));
+                tc.verifyTrue(isfinite(m.cumUncertaintyIntegral), name + ": runs");
+                snap(tc, char("scenario_" + lower(regexprep(name, '[^A-Za-z]', ''))));
+            end
+        end
+
         function addsTargetsOverBackgroundImage(tc)
             tc.ui.renderer.loadBackgroundImage(fullfile(tc.root, 'LabLayout.png'));
             tc.press(button(tc, 'Add Target'));

@@ -1,4 +1,4 @@
-classdef PathFollowerController < handle
+classdef TrackingController < handle
     % Feedback law of PhysicalAgent: PD tracking of a reference point that moves along
     % the path (position pRef, velocity vRef, acceleration aRef), with acceleration feedforward,
     %   a = aRef + kp (pRef - p) + kd (vRef - v),   |a| <= maxAccel,
