@@ -35,7 +35,7 @@ for c = 1:nC
         p.Seed = seeds(s);
         p.Log = true;
         out = runTrial(p);
-        soc = 100 * out.log.soc;
+        soc = max(0, 100 * out.log.soc);   % an empty battery reads 0%
         empty = find(any(soc <= 0, 2), 1);
         if isempty(empty), tEmpty = NaN; else, tEmpty = out.log.t(empty); end
         charges = 0;

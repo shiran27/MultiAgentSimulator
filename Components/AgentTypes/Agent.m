@@ -168,7 +168,9 @@ classdef (Abstract) Agent < handle & matlab.mixin.Heterogeneous
         end
 
         function calculate_energy(obj, dt)
-            % Battery drain over dt from the current speed, acceleration and mode
+            % Battery drain over dt from the current speed, acceleration and mode (none once an
+            % agent with stopWhenEmpty has emptied its battery: it is switched off)
+            if obj.batteryEmpty(), return; end
             obj.battery.drain(norm(obj.state.vel), norm(obj.state.acc), obj.mode == "traveling", dt);
         end
     end
