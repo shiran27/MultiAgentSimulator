@@ -13,14 +13,18 @@ classdef PhysicalAgent < Agent
     %   - its speed profile is the planned one (the policy's profile and transit time, or the
     %     agent's own) when that profile keeps within the limits on this path; otherwise it is
     %     the fastest profile that does (full acceleration and braking, slower through corners,
-    %     where the turn takes acceleration too), slowed down uniformly to the planned time
+    %     where the turn takes acceleration too), slowed down uniformly to the planned time.
+    %     With an energy-aware profile ("SO", "FO") the agent takes whichever of the two draws
+    %     less int |a|^2 dt here: on a curvy path the planned shape, optimal on a straight
+    %     line, can cost more in the turns than the retimed fastest profile
     % A plan shorter than shortestTransit(path), the fastest such profile, cannot be kept, so
     % the agent takes that long instead. The RHC policies plan with shortestTransit, so their
     % transit times are kept. legTime is the duration of the transit in progress; the agent
     % arrives within a step of it.
     %
     % The feedback is a PD law with acceleration feedforward: the reference's own change of
-    % velocity over each step (along the path and, in turns, across it). The agent counts as arrived once the reference has stopped and it is within
+    % velocity over each step (along the path and, in turns, across it). The agent counts as
+    % arrived once the reference has stopped and it is within
     % arrivePosTol of the target and almost still; while dwelling it holds its position there.
     % The profile, maxSpeed, maxAccel and the gains (controller.kp, controller.kd) are set per
     % agent (GUI: Agent Speed / Agent Accel / Speed Profile; runTrial: AgentSpeed,
@@ -76,12 +80,12 @@ classdef PhysicalAgent < Agent
 
         function f = transitEnergyModel(obj, pts, y, name, vb, ub, rhoRange)
             % int |a|^2 dt of the reference this agent follows for a plan (profile name, limits
-            % vb, ub, transit time rho in rhoRange) along pts, as a function f(rho) (vectorized).
-            % Below the rho at which the planned profile fits the agent's limits on this path,
-            % the reference is the fastest profile retimed to rho; above it, the planned profile.
-            % Each part is tabulated on a few transit times and interpolated in log-log
+            % vb, ub, transit time rho in rhoRange) along pts, as a function f(rho) (vectorized),
+            % mirroring referenceProfile: the fastest profile retimed to rho, or, from the rho at
+            % which the planned profile fits the agent's limits on this path, whichever of the two
+            % draws less. Each is tabulated on a few transit times and interpolated in log-log
             % coordinates (exact for the rho^-3 law of a profile shape scaled in time), and
-            % extrapolated by that law beyond the last
+            % extrapolated by that law; the result falls with rho (monotone)
             G = obj.geometry(pts);
             fast = obj.fastestProfile(G);
             lo = max([rhoRange(1), fast.rho, SpeedProfile.minTransit(y, vb, ub), eps]);
@@ -99,18 +103,16 @@ classdef PhysicalAgent < Agent
                 end
                 rs = b;
             end
-            r1 = []; E1 = [];
-            if rs > lo                               % the fastest profile, retimed
-                r1 = lo * (min(rs, hi) / lo) .^ linspace(0, 1, 4);
-                E1 = arrayfun(@(r) obj.referenceEnergy(G, SpeedProfile.retime(fast, r)), r1);
-            end
-            r2 = []; E2 = [];
+            top = min(hi, 8 * max(lo, min(rs, hi)));
+            rF = unique(lo * (max(top, lo) / lo) .^ linspace(0, 1, 5));   % the fastest profile, retimed
+            EF = arrayfun(@(r) obj.referenceEnergy(G, SpeedProfile.retime(fast, r)), rF);
+            rP = []; EP = [];
             if isfinite(rs)                          % the planned profile
-                r2 = rs * (min(max(hi, rs), 8 * rs) / rs) .^ linspace(0, 1, 6);
-                r2 = unique(r2);
-                E2 = arrayfun(@(r) obj.referenceEnergy(G, SpeedProfile.shape(name, y, r, vb, ub)), r2);
+                rP = unique(rs * (min(max(hi, rs), 8 * rs) / rs) .^ linspace(0, 1, 6));
+                EP = arrayfun(@(r) obj.referenceEnergy(G, SpeedProfile.shape(name, y, r, vb, ub)), rP);
             end
-            f = @(r) PhysicalAgent.tabulatedEnergy(r, rs, r1, E1, r2, E2);
+            if ~any(name == ["SO", "FO"]), rP = []; EP = []; end   % not energy-aware: no choice
+            f = @(r) PhysicalAgent.tabulatedEnergy(r, rs, rF, EF, rP, EP);
         end
 
         function k = energyModelKey(obj)
@@ -163,13 +165,15 @@ classdef PhysicalAgent < Agent
     end
 
     methods (Static, Access = private)
-        function E = tabulatedEnergy(r, rs, r1, E1, r2, E2)
-            % transitEnergyModel's interpolation: part 1 (fastest, retimed) below rs, part 2
-            % (planned) from rs; log-log linear inside each table, the rho^-3 law outside
-            E = zeros(size(r));
-            in1 = r < rs;
-            if any(in1), E(in1) = part(r(in1), r1, E1); end
-            if any(~in1), E(~in1) = part(r(~in1), r2, E2); end
+        function E = tabulatedEnergy(r, rs, rF, EF, rP, EP)
+            % transitEnergyModel's interpolation: the retimed fastest profile's energy, and from
+            % rs the lower of it and the planned profile's; log-log linear inside each table, the
+            % rho^-3 law outside
+            E = part(r, rF, EF);
+            if ~isempty(rP)
+                in = r >= rs;
+                if any(in(:)), E(in) = min(E(in), part(r(in), rP, EP)); end
+            end
 
             function e = part(r, rg, Eg)
                 Eg = max(Eg, realmin);
@@ -219,10 +223,14 @@ classdef PhysicalAgent < Agent
 
         function P = referenceProfile(obj, G, P)
             % The planned profile P if it keeps within the reference limits along G, else the
-            % fastest profile that does, slowed down to P's time (if that is longer)
+            % fastest profile that does, slowed down to P's time (if that is longer). For an
+            % energy-aware P ("SO", "FO"), the retimed fastest profile also when it draws less
             fastest = obj.fastestProfile(G);
             if P.rho < fastest.rho || ~obj.keepsLimits(P, G)
                 P = SpeedProfile.retime(fastest, max(P.rho, fastest.rho));
+            elseif any(P.name == ["SO", "FO"])
+                Q = SpeedProfile.retime(fastest, P.rho);
+                if obj.referenceEnergy(G, Q) < obj.referenceEnergy(G, P), P = Q; end
             end
         end
 
