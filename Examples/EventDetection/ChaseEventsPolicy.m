@@ -5,8 +5,10 @@ classdef ChaseEventsPolicy < Policy
     methods
         function cmd = plan(~, agent, model, adj, i, ~)
             cmd = struct();                                  % stay (no free neighbor)
-            others = model.agents([model.agents.index] ~= agent.index);
-            free = setdiff(find(adj(i, :)), [others.current_target_idx]);
+            idx = [model.agents.index];
+            others = model.agents(idx ~= agent.index);
+            busy = [others.current_target_idx];              % targets other agents hold
+            free = setdiff(find(adj(i, :)), busy);
             if isempty(free), return; end
             tg = model.targets(free);
             [R, k] = max([tg.R]);

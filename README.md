@@ -281,7 +281,7 @@ Every edge's path is planned once, when the edge is added (and again when walls 
 | `ChaseEventsPolicy` | `Policy` | Goes to the free neighbor with the most events in progress (else the one visited longest ago) |
 | `MissedEvents` | `Metric` | Share of the events that ended before an agent detected them |
 
-Each is one line in `ComponentRegistry`, so it appears in the GUI's dropdowns (Target Type, Agent Type, Active Policy, Objective) and in `runTrial` (`TargetType`, `AgentType`, `Policy`, `Metrics`). `eventDetectionExample.m` walks through the whole process in seven sections, each doing what the named GUI clicks do: import the floor plan, draw the walls, mark the targets, add the edges (the planner routes them around the walls), choose the new classes and place the robots, run, and compare policies headless with `runTrial`. It saves what the canvas shows after each step to `results/example/`. On the museum, Chase Events misses about 15% of the events and Random Walk about 44% (10 runs of 600 s).
+Each is one line in `ComponentRegistry`, so it appears in the GUI's dropdowns (Target Type, Agent Type, Active Policy, Objective) and in `runTrial` (`TargetType`, `AgentType`, `Policy`, `Metrics`). `eventDetectionExample.m` walks through the whole process in seven sections, each doing what the named GUI clicks do: import the floor plan, draw the walls, mark the targets, add the edges (the planner routes them around the walls), choose the new classes and place the robots, run, and compare policies headless with `runTrial`. It saves what the canvas shows after each step to `results/example/`. On the museum, Chase Events misses about 15% of the events and Random Walk about 45% (10 runs of 600 s).
 
 ## Adding a new modular class
 

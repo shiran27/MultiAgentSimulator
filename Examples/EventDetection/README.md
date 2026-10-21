@@ -8,7 +8,7 @@ Four classes define the problem, one per extension point of the simulator:
 |---|---|---|---|
 | `EventTarget.m` | `Target` | 39 | Events arrive at rate `eventRate` (a Poisson process) and last `lifetime` s; an agent at the target detects those in progress. `R` = events in progress |
 | `SimpleAgent.m` | `Agent` | 34 | Moves at its top speed from path point to path point |
-| `ChaseEventsPolicy.m` | `Policy` | 20 | Goes to the free neighbor with the most events in progress, else to the one visited longest ago |
+| `ChaseEventsPolicy.m` | `Policy` | 22 | Goes to the free neighbor with the most events in progress, else to the one visited longest ago |
 | `MissedEvents.m` | `Metric` | 17 | Share of the events that ended before an agent detected them |
 
 `Components/ComponentRegistry.m` registers each with one line, so they appear in the GUI (Target Type, Agent Type, Active Policy and Objective dropdowns) and in `runTrial` (`TargetType`, `AgentType`, `Policy`, `Metrics`).
@@ -25,7 +25,7 @@ Open `eventDetectionExample.m` and run it section by section (Ctrl+Enter) while 
 6. Run ten minutes (End time, Run to End); the objective window plots the share of events missed.
 7. Save the layout and compare policies without the GUI (`runTrial`, ten seeds each).
 
-Each step saves the canvas to `results/example/`. The finished scenario is also in the Scenario dropdown as "Museum (event detection example)". Typical result: Chase Events misses about 15% of the events and Random Walk about 44%.
+Each step saves the canvas to `results/example/`. The finished scenario is also in the Scenario dropdown as "Museum (event detection example)". Typical result: Chase Events misses about 15% of the events and Random Walk about 45%.
 
 ## Making it your own
 
