@@ -25,7 +25,7 @@ Open `eventDetectionExample.m` and run it section by section (Ctrl+Enter) while 
 6. Run ten minutes (End time, Run to End); the objective window plots the share of events missed.
 7. Save the layout and compare policies without the GUI (`runTrial`, ten seeds each).
 
-Each step saves the canvas to `results/example/`. The finished scenario is also in the Scenario dropdown as "Museum (event detection example)". Typical result: SimplePolicy misses about 15% of the events and Random Walk about 45%.
+Each step saves the canvas to `results/example/`. The finished scenario is also in the Scenario dropdown as "Museum (event detection example)". Typical result: SimplePolicy misses about 13% of the events and Random Walk about 44%.
 
 ## Making it your own
 
