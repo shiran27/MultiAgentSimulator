@@ -26,7 +26,8 @@ classdef EDRHCPolicy < handle
     % simulator; alpha = 0.5 gives the unweighted RHC method of Sec. III.
     %
     % Transit models (property transit):
-    %   "constant speed"  rho_ij = y_ij / maxSpeed, fixed (first-order agents, FO-0)
+    %   "constant speed"  rho_ij = y_ij / maxSpeed, fixed (first-order agents, FO-0), or the
+    %                     agent's shortestTransit if that is longer (a PhysicalAgent's own pace)
     %   "SO"              rho_ij is a decision: the RHCP minimizes energyWeight * E(rho) + J_sH
     %                     with the energy E(rho) of the minimum-energy speed profile, 12 y^2/rho^3
     %                     without limits (Theorem 3)
@@ -34,7 +35,8 @@ classdef EDRHCPolicy < handle
     %                     paper's FO-3, Theorem 5)
     % speedLimit and accelLimit (Inf by default) bound the energy-aware profiles. E(rho) is then
     % that of the bounded minimum-energy profile (Apps. D-E, generalized to both limits; see
-    % SpeedProfile), and rho is no shorter than the limits allow.
+    % SpeedProfile), and rho is no shorter than the limits allow, nor than the agent's
+    % shortestTransit (the shortest transit it can keep; 0 for an AbstractAgent).
     % When an agent leaves, the policy hands it the planned transit time rho_ij; the energy-
     % aware models also hand it their profile and limits. A AbstractAgent then follows the
     % plan exactly (with profile "constant" it is the first-order agent of the Automatica paper;
@@ -183,14 +185,16 @@ classdef EDRHCPolicy < handle
             end
             best = struct('cost', inf, 'j', [], 'x', zeros(1, 4), 'rho', NaN, 'uBi', uBi);
             for k = 2:numel(hood)
-                y = obj.pathLength(model, i, hood(k));
+                [y, pts] = obj.pathLength(model, i, hood(k));
                 rho0 = y / agent.state.maxSpeed;
+                rhoAgent = agent.shortestTransit(pts);   % what the agent can keep (0: any)
                 if obj.transit == "constant speed"
+                    rho0 = max(rho0, rhoAgent);
                     if rho0 > obj.H, continue; end
                     rhoRange = [rho0 rho0];
                 else
-                    rhoRange = [max(obj.minTransit * rho0, ...
-                        SpeedProfile.minTransit(y, obj.speedLimit, obj.accelLimit)), obj.H];
+                    rhoRange = [max([obj.minTransit * rho0, ...
+                        SpeedProfile.minTransit(y, obj.speedLimit, obj.accelLimit), rhoAgent]), obj.H];
                 end
                 d = struct('R', R, 'A', A, 'B', B, 'j', k, 'rho', rho0, 'w', weights, ...
                     'y', y, 'vb', obj.speedLimit, 'ub', obj.accelLimit);
@@ -438,7 +442,8 @@ classdef EDRHCPolicy < handle
             end
         end
 
-        function y = pathLength(~, model, i, j)
+        function [y, pts] = pathLength(~, model, i, j)
+            % Length y of the path of edge (i, j), and its points
             pts = model.findEdge(i, j).curvePoints;
             y = sum(vecnorm(diff(pts, 1, 1), 2, 2));
         end

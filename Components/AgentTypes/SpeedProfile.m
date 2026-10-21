@@ -17,6 +17,9 @@ classdef SpeedProfile
     %               Without limits the cruise speed is 3y/(2 rho), E = 27 y^2/(2 rho^3)
     %               (Theorem 5); with limits it is clamped to what they allow (App. E)
     % Limits make transits shorter than minTransit infeasible.
+    % A profile can also be a table (kind "table", from SpeedProfile.table): speeds at given
+    % distances, with constant acceleration in between. PhysicalAgent uses one for its paths,
+    % whose corners limit the speed.
     properties (Constant)
         names = ["constant", "SO", "FO"]
     end
@@ -52,9 +55,16 @@ classdef SpeedProfile
 
         function [l, v, u, e] = at(P, t)
             % Distance l, speed v, tangential acceleration u and energy int_0^t u^2 at time t in
-            % [0, rho]; every profile is symmetric about rho/2
+            % [0, rho]; every profile but a table is symmetric about rho/2
             t = min(max(t, 0), P.rho);
-            if t <= P.rho / 2
+            if P.kind == "table"
+                k = min(find(P.t <= t, 1, 'last'), numel(P.t) - 1);
+                dt = t - P.t(k);
+                l = min(P.l(k) + P.v(k) * dt + P.u(k) * dt^2 / 2, P.y);
+                v = max(P.v(k) + P.u(k) * dt, 0);
+                u = P.u(k);
+                e = P.e(k) + u^2 * dt;
+            elseif t <= P.rho / 2
                 [l, v, u, e] = SpeedProfile.firstHalf(P, t);
             else
                 [l, v, u, e] = SpeedProfile.firstHalf(P, P.rho - t);
@@ -63,8 +73,28 @@ classdef SpeedProfile
             end
         end
 
+        function P = table(l, v)
+            % The profile through speeds v(k) at distances l(k) (rest to rest: v(1) = v(end) =
+            % 0), with constant acceleration between consecutive distances
+            l = l(:); v = v(:);
+            dl = diff(l);
+            dt = 2 * dl ./ max(v(1:end-1) + v(2:end), eps);
+            u = (v(2:end).^2 - v(1:end-1).^2) ./ (2 * dl);
+            t = [0; cumsum(dt)];
+            P = struct('name', "table", 'y', l(end), 'rho', t(end), 'kind', "table", ...
+                't', t, 'l', l, 'v', v, 'u', [u; 0], 'e', [0; cumsum(u.^2 .* dt)]);
+        end
+
+        function P = retime(P, rho)
+            % A table profile slowed down to take rho (at least P.rho): the same path, with
+            % speeds scaled by P.rho/rho and accelerations by (P.rho/rho)^2
+            c = P.rho / rho;
+            P.t = P.t / c; P.v = P.v * c; P.u = P.u * c^2; P.e = P.e * c^3; P.rho = rho;
+        end
+
         function [vPeak, uPeak] = peaks(P)
             % Largest speed and |acceleration| of the profile (impulses not counted)
+            if P.kind == "table", vPeak = max(P.v); uPeak = max(abs(P.u)); return; end
             [~, vPeak] = SpeedProfile.at(P, P.rho / 2);
             [~, ~, uPeak] = SpeedProfile.at(P, 0);
             uPeak = abs(uPeak);

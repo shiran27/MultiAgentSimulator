@@ -115,8 +115,8 @@ There are two agent types (`Components/AgentTypes/`): the **Abstract Agent**, an
 
 | | Abstract Agent (`AbstractAgent`) | Physical Agent (`PhysicalAgent`) |
 |---|---|---|
-| Motion | Follows its speed profile exactly along the path (arc length), at rest on the targets | Double integrator with a PD law tracking a reference that moves along the path with the same profile; speed and acceleration saturate at `maxSpeed` and `maxAccel` |
-| Timing | Every transit takes exactly the planned time | Keeps the planned pace, but lags where the plan asks more than its limits allow; arrives within 0.5 of the target once nearly still |
+| Motion | Follows its speed profile exactly along the path (arc length), at rest on the targets | Double integrator (speed and acceleration saturate at `maxSpeed` and `maxAccel`) with a PD law and feedforward tracking a reference it can follow: the path with its corners rounded, and a speed profile within `planMargin` (0.8) of both limits that slows down for turns |
+| Timing | Every transit takes exactly the planned time | Arrives within a step or two of the planned time, if the plan is at least its `shortestTransit(path)`; otherwise it takes `shortestTransit`. The RHC policies plan with it |
 | Model of | The event-driven RHC papers: first-order agent (`"constant"` profile) or energy-optimal second-order agent (`"SO"`, `"FO"`) | A physical robot executing the same plan with feedback |
 | `J_e` | Tangential acceleration only (NaN with `"constant"`: impulses) | Full commanded acceleration |
 
@@ -125,7 +125,9 @@ There are two agent types (`Components/AgentTypes/`): the **Abstract Agent**, an
 - `"SO"`: minimum energy.
 - `"FO"`: minimum-energy trapezoid.
 
-Without a planned transit time an agent crosses an edge of length `y` in `y/maxSpeed` (`"constant"`) or `1.5 y/maxSpeed` (`"SO"`, `"FO"`, peak speed `maxSpeed`). On curved paths the profile depends on the path length only; the heading follows the path and turns at `omega = kappa * v` (`state.omega`), as in Theorem 2 of the energy-aware paper.
+Without a planned transit time an Abstract Agent crosses an edge of length `y` in `y/maxSpeed` (`"constant"`) or `1.5 y/maxSpeed` (`"SO"`, `"FO"`, peak speed `maxSpeed`). On curved paths its profile depends on the path length only; the heading follows the path and turns at `omega = kappa * v` (`state.omega`), as in Theorem 2 of the energy-aware paper.
+
+A Physical Agent follows the planned profile when that profile keeps within its reference limits on the path (`"SO"` and `"FO"` usually do on straight edges). Otherwise, it follows its fastest profile within those limits (full acceleration and braking, slower through corners, where the turn takes acceleration too), slowed down uniformly to the planned time. `"constant"` never fits, since it jumps to its speed, so with `"constant"` a Physical Agent moves at its own fastest pace, `shortestTransit(path)`. Its feedforward is the reference's own change of velocity over each step, so an agent on the reference stays on it.
 
 **Spawning and customizing.** Agents are spawned from an `AgentSpec` (`Components/AgentTypes/AgentSpec.m`):
 - the type (a registered name);
@@ -145,7 +147,7 @@ Unset settings keep the type's defaults. One spec serves every place that create
 
 **Parts held by every agent, swappable without subclassing:**
 - **Speed profile** (`SpeedProfile`): chosen per transit by a planning policy, or the agent's own `profile`.
-- **Controller** (`TrackingController`): PD tracking with feedforward. Physical Agents use it; replace `agent.controller` to try another law.
+- **Controller** (`TrackingController`): PD tracking with acceleration feedforward. Physical Agents use it; replace `agent.controller` to try another law.
 - **Battery** (`Battery`): capacity and power model, `agent.battery`. Reported as SOC; with `stopWhenEmpty` the agent stops when it is empty.
 
 New agent types are subclasses for different platforms (dynamics, limits, sensing), not for profiles; see [New Agent Type](#3-new-agent-type).
@@ -156,7 +158,7 @@ New agent types are subclasses for different platforms (dynamics, limits, sensin
 
 **Policies and agent types.** Each policy states what it assumes of the agents' motion: `agentAssumption` on the policy, or `ComponentRegistry.assumptions` for policies that do not declare it.
 - `"any"`: no timing assumption.
-- `"plans transit"`: hands each transit's time (and profile) to the agent.
+- `"plans transit"`: hands each transit's time (and profile) to the agent, no shorter than the agent's `shortestTransit(path)` (0 for an Abstract Agent).
 - `"constant speed"`: transit = path length / `maxSpeed`, not handed over.
 
 `ScenarioModel.checkAgentFit` turns this into a note in the GUI status line and a warning in `runTrial`.
@@ -165,11 +167,11 @@ New agent types are subclasses for different platforms (dynamics, limits, sensin
 
 | Policy | Abstract | Physical | Notes |
 |---|---|---|---|
-| Random Walk | ✓ | ✓ | No timing assumptions; dwell from the current `R` at arrival |
-| Battery Efficient | ✓ | ✓ | Every agent has a battery |
-| ED-RHC | ✓ | ≈ | Hands the agent its planned transit `y/maxSpeed`. `"constant"` is the Automatica model; `"SO"` runs it with the SO shape (the JS SO#) |
-| ED-ORHC-SO / -FO | ✓ | ≈ (✓ when `speedLimit` and `accelLimit` are within the agent's `maxSpeed` and `maxAccel`) | Hands over the optimal transit time, profile and limits |
-| Classical RHC [1], Divergent RHC, Joint RHC, Joint RHC N | ✓ with `"constant"`; ≈ with `"SO"`/`"FO"` (1.5× slower than planned) | ≈ | Plan transits as path length / `maxSpeed`. Joint RHC needs exactly 2 agents |
+| Random Walk | ✓ | ✓ | No timing assumptions; dwell from the current `R` at arrival. Each agent moves at its own pace (a Physical Agent: `shortestTransit`) |
+| Battery Efficient | ✓ | ✓ | Every agent has a battery; each agent moves at its own pace |
+| ED-RHC | ✓ | ✓ | Hands the agent its planned transit: `y/maxSpeed`, or the agent's `shortestTransit` if longer (a Physical Agent's own pace). `"constant"` is the Automatica model; `"SO"` runs it with the SO shape (the JS SO#) |
+| ED-ORHC-SO / -FO | ✓ | ✓ | Hands over the optimal transit time (no shorter than the agent's `shortestTransit`), profile and limits. A Physical Agent keeps the time; its profile is the planned one where that fits its limits, so its energy can differ from the plan's |
+| Classical RHC [1], Divergent RHC, Joint RHC, Joint RHC N | ✓ with `"constant"`; ≈ with `"SO"`/`"FO"` (1.5× slower than planned) | ≈ | Plan transits as path length / `maxSpeed`, which a Physical Agent cannot keep (it takes its `shortestTransit`). Joint RHC needs exactly 2 agents |
 
 ## Random Walk
 

@@ -9,7 +9,9 @@ classdef (Abstract) Agent < handle & matlab.mixin.Heterogeneous
     %   - a speed profile for its transits (SpeedProfile: "constant", "SO" or "FO"). A policy
     %     that plans a transit may hand the agent its transit time, profile and speed /
     %     acceleration limits before it leaves a target (as RHC policies set dwellRemaining);
-    %     otherwise the agent uses its own profile with peak speed maxSpeed
+    %     otherwise the agent uses its own profile with peak speed maxSpeed. A policy plans
+    %     transit times of at least shortestTransit(path), which the agent can keep; legTime is
+    %     the planned duration of the transit in progress (or the last one)
     %   - energy metrics: Je = int |u|^2 dt (NaN once a "constant" transit is used: its
     %     impulsive accelerations make it undefined), peak speed and acceleration
     %   - a battery (Battery: capacity and power model), reported as SOC (about an hour of
@@ -31,6 +33,8 @@ classdef (Abstract) Agent < handle & matlab.mixin.Heterogeneous
         transitTime = NaN           % planned transit time of the next edge (NaN: from maxSpeed)
         transitProfile string = ""  % profile of the next edge ("" = profile)
         transitLimits = [Inf Inf]   % [speed, acceleration] limits of the next edge's profile
+
+        legTime = NaN               % planned duration of the transit in progress (or the last)
 
         Je = 0                      % energy objective int |u(t)|^2 dt so far
         peakSpeed = 0               % largest speed so far
@@ -79,6 +83,7 @@ classdef (Abstract) Agent < handle & matlab.mixin.Heterogeneous
             obj.dwellRemaining = 0;
             obj.current_target_idx = obj.initialTargetIdx;
             obj.clearTransitPlan();
+            obj.legTime = NaN;
             obj.Je = 0;
             obj.peakSpeed = 0;
             obj.peakAccel = 0;
@@ -119,6 +124,12 @@ classdef (Abstract) Agent < handle & matlab.mixin.Heterogeneous
             set(obj.textHandle, 'Position', [obj.state.pos(1), obj.state.pos(2), 0], 'String', obj.label());
         end
 
+        function rho = shortestTransit(~, ~)
+            % Shortest transit time along a path (N x 2 points) this agent can keep: 0, since an
+            % idealized agent follows any plan (PhysicalAgent overrides this)
+            rho = 0;
+        end
+
         function calculate_energy(obj, dt)
             % Battery drain over dt from the current speed, acceleration and mode
             obj.battery.drain(norm(obj.state.vel), norm(obj.state.acc), obj.mode == "traveling", dt);
@@ -157,14 +168,20 @@ classdef (Abstract) Agent < handle & matlab.mixin.Heterogeneous
             th = unwrap(atan2(d(:, 2), d(:, 1)));
             seg = diff(s);
             h = min([0.5 * ones(numel(seg) - 1, 1), seg(1:end-1) / 2, seg(2:end) / 2], [], 2);
+            L = struct('pts', pts, 's', s, 'P', obj.plannedProfile(y), 'tau', 0, 'e', 0, 'th', th, 'h', h);
+            obj.legTime = L.P.rho;
+        end
+
+        function P = plannedProfile(obj, y)
+            % The speed profile of a transit of length y: the policy's plan (transit time,
+            % profile, limits) or the agent's own profile with peak speed maxSpeed
             name = obj.transitProfile;
             if name == "", name = obj.profile; end
             lim = obj.transitLimits;
             rho = obj.transitTime;
             if ~(rho > 0), rho = SpeedProfile.defaultTransit(name, y, obj.state.maxSpeed); end
             rho = max(rho, SpeedProfile.minTransit(y, lim(1), lim(2)));
-            L = struct('pts', pts, 's', s, 'P', SpeedProfile.shape(name, y, rho, lim(1), lim(2)), ...
-                'tau', 0, 'e', 0, 'th', th, 'h', h);
+            P = SpeedProfile.shape(name, y, rho, lim(1), lim(2));
         end
 
         function [p, dir] = pointAt(~, L, l)

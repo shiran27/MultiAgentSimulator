@@ -13,7 +13,8 @@ function smokeTest()
 %    runTrial with the paper preset (Experiments/paper/paperDefaults); ED-ORHC-SO / -FO with
 %    speed and acceleration limits keep every agent within them.
 % 5. Agent types: the older type names still resolve (aliases); every type x speed profile runs;
-%    only agents at rest service targets; physical agents keep pace on wall-routed edges; the
+%    only agents at rest service targets; a physical agent arrives within a step or two of its
+%    planned time on a wall-routed edge, and keeps the transit times ED-RHC plans; the
 %    heading turns smoothly on curved paths; William's Joint RHC harness (runTrial defaults with
 %    'Linear Agent') runs.
 % 6. Scenarios (scenarioCatalog): each loads (with its background image, if any) and runs 10 s
@@ -156,14 +157,34 @@ try   % service only at rest
 catch err
     check(false, "service at rest  ERROR " + err.message);
 end
-try   % physical agents keep pace on a wall-routed edge (no crawling)
+try   % physical agents arrive when planned on a wall-routed edge
     sim = reportScenario('Dijkstra Corners', {'Physical Agent'});
     e = sim.findEdge(8, 2); P = e.curvePoints; y = sum(vecnorm(diff(P, 1, 1), 2, 2));
     a = PhysicalAgent(1, P(1, :), 15); a.path = P; t = 0;
     while ~isempty(a.path) && t < 60, a.update(0.05); t = t + 0.05; end
-    check(t < y / 15 + 3, sprintf('physical agent crosses edge 8-2 (%.1f m) in %.1f s (planned %.1f s)', y, t, y / 15));
+    check(t >= a.legTime && t <= a.legTime + 0.1 + 1e-9 && a.legTime == a.shortestTransit(P), ...
+        sprintf('physical agent crosses edge 8-2 (%.1f m) in %.2f s (planned %.2f s, its shortest)', y, t, a.legTime));
 catch err
-    check(false, "physical agent pace  ERROR " + err.message);
+    check(false, "physical agent arrival  ERROR " + err.message);
+end
+try   % ED-RHC plans with the physical agents' own transit times, and they keep them
+    sim = reportScenario('Dijkstra Corners', {'Physical Agent'});
+    sim.setActivePolicy('ED-RHC'); sim.resetSimulationState();
+    step = 0.05; clock = SimulationClock(60, step); nA = numel(sim.agents);
+    moving = false(1, nA); t0 = zeros(1, nA); handed = zeros(1, nA); late = [];
+    while ~clock.isFinished()
+        dt = clock.tick(); sim.step(dt, clock.currentTime); sim.updateTargetsAndLogObjective(clock.currentTime, dt);
+        for k = 1:nA
+            a = sim.agents(k); now = ~isempty(a.path) && a.dwellRemaining <= 0;
+            if now && ~moving(k), t0(k) = clock.currentTime - dt; handed(k) = a.transitTime; end
+            if ~now && moving(k) && isempty(a.path), late(end+1) = clock.currentTime - t0(k) - handed(k); end %#ok<AGROW>
+            moving(k) = now;
+        end
+    end
+    check(numel(late) > 10 && all(late > -1e-9 & late <= 2 * step + 1e-9), sprintf(['ED-RHC with ' ...
+        'physical agents: %d transits, arrival - planned in [%.3f, %.3f] s'], numel(late), min(late), max(late)));
+catch err
+    check(false, "ED-RHC physical transit times  ERROR " + err.message);
 end
 try   % smooth heading on a curved path
     a = AbstractAgent(1, P(1, :), 15); a.path = P; ori = []; om = [];
