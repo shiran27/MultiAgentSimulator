@@ -93,7 +93,7 @@ The experiment harness (`Experiments/runTrial`, `Experiments/trialDefaults.m`) s
 
 Only `targets` and `edges` are required, so files saved by older versions still load: missing fields keep the defaults above (agents take the GUI's Agent Accel and Speed Profile) and no agents are placed. Loaded agents use the Agent Type selected in the dropdown. `runTrial` ignores stored agents and places its own from the `AgentStarts` parameter.
 
-`Configurations/ReportLayout.mat` is the reference scenario of the simulator paper (Stevens Smart Lab, background `LabFloor.png`, a recolored `LabLayout.png`): 11 targets, 10 edges, 3 walls, and 5 agents at speed 15 starting on targets **1, 6, 2, 3, 5** (agent 1 on target 1, agent 2 on target 6, and so on), in `Static Uniform` mode with `A = 1`, `B = 10`, `R(0) = 0`.
+`Configurations/ReportLayout.mat` is the reference scenario of the simulator paper (Stevens Smart Lab, background `LabFloor.png`: `LabLayout.png` recolored, without the diamond-shaped block in the middle): 11 targets, 10 edges, 92 walls (3 placed by hand plus 89 traced from the floor plan by `makeScenarioLayouts`, so routes stay on the open floor), and 5 agents at speed 15 starting on targets **1, 6, 2, 3, 5** (agent 1 on target 1, agent 2 on target 6, and so on), in `Static Uniform` mode with `A = 1`, `B = 10`, `R(0) = 0`.
 
 ## Smoke test
 

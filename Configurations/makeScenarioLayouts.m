@@ -4,8 +4,8 @@ function makeScenarioLayouts()
 % whose walls come from the same geometry as the picture, so they line up exactly. Run it again
 % after editing a scenario:
 %   matlab -batch "addpath(genpath(pwd)); makeScenarioLayouts"
-% Also restyles the lab floor plan (LabLayout.png -> backgrounds/LabFloor.png) and records it as
-% the background of ReportLayout.mat.
+% Also restyles the lab floor plan (LabLayout.png -> backgrounds/LabFloor.png), records it as the
+% background of ReportLayout.mat, and gives ReportLayout the walls traced from the plan.
 here = fileparts(mfilename('fullpath'));
 bgDir = fullfile(here, 'backgrounds');
 if ~isfolder(bgDir), mkdir(bgDir); end
@@ -18,38 +18,73 @@ for k = 1:numel(makers)
     fprintf('%s: %d targets, %d edges, %d walls, %d agents\n', name, size(s.targets, 1), ...
         size(s.edges, 1), size(s.walls, 1), numel(s.agentStarts));
 end
-restyleLabFloor(fullfile(fileparts(here), 'LabLayout.png'), fullfile(bgDir, 'LabFloor.png'));
+lab = labPixels(fullfile(fileparts(here), 'LabLayout.png'));
+restyleLabFloor(lab, fullfile(bgDir, 'LabFloor.png'));
 tmp = load(fullfile(here, 'ReportLayout.mat'), 's');
 s = tmp.s;
 s.background = "LabFloor.png";
+paperWalls = [20 65 20 75; 20 50 60 50; 60 40 60 60];   % the reference scenario's three walls
+s.walls = [paperWalls; traceLabWalls(lab)];
 save(fullfile(here, 'ReportLayout.mat'), 's');
+fprintf('ReportLayout: %d walls (%d traced from the floor plan)\n', size(s.walls, 1), size(s.walls, 1) - 3);
 end
 
-function restyleLabFloor(src, dst)
-% The Stevens lab floor plan (LabLayout.png) recolored in the palette of the other maps, with
-% its geometry and labels unchanged: a warm floor, light slate benches and door leaves, slate
-% walls, and a green exterior around the building
+function lab = labPixels(src)
+% Pixel classes of the Stevens lab floor plan (LabLayout.png): open floor (one region, which
+% also reaches outside through the doors), other floor (benches, door leaves), the green area,
+% dark outlines and text, walls, the building's extent, and the diamond-shaped block in the
+% middle of the floor (dropped from the map: the reference scenario has walls there instead)
 I = im2double(imread(src)); I = I(:, :, 1:3);
 g = mean(I, 3); sat = max(I, [], 3) - min(I, [], 3);
-green = I(:, :, 2) - I(:, :, 1) > 0.12;
-floorM = g >= 0.90 & ~green;
-dark = g < 0.42 & ~green;                                  % outlines and text
-wallM = ~floorM & ~dark & ~green & sat < 0.10 & g < 0.75;
-light = ~floorM & ~dark & ~green & ~wallM;
+lab.I = I;
+lab.green = I(:, :, 2) - I(:, :, 1) > 0.12;
+lab.floor = g >= 0.90 & ~lab.green;
+lab.dark = g < 0.42 & ~lab.green;
+lab.wall = ~lab.floor & ~lab.dark & ~lab.green & sat < 0.10 & g < 0.75;
+lab.light = ~lab.floor & ~lab.dark & ~lab.green & ~lab.wall;
+L = bwlabel(lab.floor, 4);
+[~, k] = max(accumarray(L(L > 0), 1));
+lab.open = L == k;
+rows = find(sum(lab.wall, 2) > 50); cols = find(sum(lab.wall, 1) > 50);   % long wall runs
+lab.inside = false(size(g));
+lab.inside(rows(1):rows(end), cols(1):cols(end)) = true;
+F = (lab.open | lab.green) & lab.inside;
+H = bwlabel(imfill(F, 'holes') & ~F, 8);                  % holes in the floor: text, the block
+[~, k] = max(accumarray(H(H > 0), 1));
+lab.block = imdilate(H == k, strel('disk', 2));
+end
+
+function restyleLabFloor(lab, dst)
+% The lab floor plan recolored in the palette of the other maps, with its geometry and labels
+% unchanged: a warm floor, light slate benches and door leaves, slate walls, and a green
+% exterior around the building
 setc = @(O, M, c) O .* ~M + reshape(c, 1, 1, 3) .* M;
-L = bwlabel(floorM, 4);
-area = accumarray(L(L > 0), 1);
-[~, open] = max(area);                                     % the open lab floor (and outside)
-rows = find(sum(wallM, 2) > 50); cols = find(sum(wallM, 1) > 50);   % the building's extent
-inside = false(size(g)); inside(rows(1):rows(end), cols(1):cols(end)) = true;
-out = setc(zeros(size(I)), floorM, [0.85 0.88 0.91]);     % enclosed floor: benches, door leaves
-out = setc(out, L == open & inside, [0.965 0.953 0.925]);
-out = setc(out, L == open & ~inside, [0.85 0.88 0.82]);
-out = setc(out, wallM, [0.37 0.42 0.48]);
-out = setc(out, light, [0.80 0.82 0.85]);
-out = setc(out, green, [0.49 0.72 0.55]);
-out = setc(out, dark, [0.20 0.23 0.27]);
+out = setc(zeros(size(lab.I)), lab.floor, [0.85 0.88 0.91]);
+out = setc(out, lab.open & lab.inside, [0.965 0.953 0.925]);
+out = setc(out, lab.open & ~lab.inside, [0.85 0.88 0.82]);
+out = setc(out, lab.wall, [0.37 0.42 0.48]);
+out = setc(out, lab.light, [0.80 0.82 0.85]);
+out = setc(out, lab.green, [0.49 0.72 0.55]);
+out = setc(out, lab.dark, [0.20 0.23 0.27]);
+out = setc(out, lab.block, [0.965 0.953 0.925]);
 imwrite(out, dst);
+end
+
+function walls = traceLabWalls(lab)
+% Walls along the edge of the lab's open floor (benches, room walls, door leaves; the green area,
+% text labels and the dropped block count as open floor), as segments on the [0, 100]^2 canvas
+% the image is stretched to
+[H, W] = size(lab.open);
+F = imfill((lab.open | lab.green) & lab.inside, 'holes');
+F = bwareaopen(F, 1000, 4);
+walls = zeros(0, 4);
+for B = bwboundaries(F, 4)'
+    P = reducepoly(B{1}, 0.003);                           % [row col], within about 4 px
+    x = (P(:, 2) - 1) / (W - 1) * 100;
+    y = (H - P(:, 1)) / (H - 1) * 100;
+    walls = [walls; x(1:end-1), y(1:end-1), x(2:end), y(2:end)]; %#ok<AGROW>
+end
+walls = round(walls, 2);
 end
 
 %% ---------------------------------------------------------------------------------------------

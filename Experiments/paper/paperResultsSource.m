@@ -43,8 +43,8 @@ parameters = paperTables("parameters", base, seeds)
 
 %% Figs. 9 and 2: the reference scenario in the GUI
 % |Configurations/ReportLayout.mat| over the Stevens Smart Lab map: 11 targets, 10 edges,
-% 3 walls, and 5 agents on targets 1, 6, 2, 3, and 5. Fig. 9 shows it at t = 0 and Fig. 2
-% after a short run with the Battery Efficient policy.
+% 3 walls plus 89 traced from the floor plan, and 5 agents on targets 1, 6, 2, 3, and 5.
+% Fig. 9 shows it at t = 0 and Fig. 2 after a short run with the Battery Efficient policy.
 showImages([paperGuiFigures("setup", figDir); paperGuiFigures("overview", figDir)]);
 
 %% Table II and Figs. 10-11: movement policies

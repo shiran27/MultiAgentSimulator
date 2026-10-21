@@ -120,7 +120,8 @@ classdef MainUI < handle
     methods (Static, Access = private)
         function [mainPos, objPos] = windowPositions(monitor)
             % Default spots on the primary monitor, or fitted onto the given monitor: main window
-            % at its top left, objective window to the right or, if there is no room, below
+            % at its top left, objective window to the right or below; if neither fits, at the
+            % monitor's bottom right corner, over the main window
             mainPos = [100 100 1200 780];
             objPos = [1350 200 700 450];
             if isempty(monitor), return; end
@@ -132,10 +133,13 @@ classdef MainUI < handle
             h = min(780, m(4) - 120);
             mainPos = [m(1) + gap, top - h, w, h];
             ow = min(700, m(3) - 2*gap);
+            below = mainPos(2) - gap - 30 - 450;          % 30: title bar
             if mainPos(1) + w + gap + ow <= m(1) + m(3) - gap
                 objPos = [mainPos(1) + w + gap, top - 450, ow, 450];
+            elseif below >= m(2) + gap
+                objPos = [m(1) + gap, below, ow, 450];
             else
-                objPos = [m(1) + gap, mainPos(2) - gap - 30 - 450, ow, 450];   % 30: title bar
+                objPos = [m(1) + m(3) - gap - ow, m(2) + gap, ow, 450];
             end
         end
     end
