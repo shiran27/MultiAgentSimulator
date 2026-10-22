@@ -36,6 +36,19 @@ model.agents = [];   % trial parameters place the agents ("layout" reuses the st
 for t = model.targets
     t.configure(p);
 end
+% TargetA / TargetB (optional): per-target growth and sensing rates (vectors over the targets),
+% e.g. targets that only a group of agents can clear (A_i >= B_i)
+for name = ["TargetA", "TargetB"]
+    if isfield(p, name)
+        v = p.(name);
+        assert(numel(v) == numel(model.targets), '%s needs one value per target', name);
+        for k = 1:numel(model.targets)
+            if name == "TargetA", model.targets(k).setRates(v(k), [], []);
+            else, model.targets(k).setRates([], v(k), []);
+            end
+        end
+    end
+end
 
 starts = parseStarts(p.AgentStarts, stored);
 if ~isempty(starts), p.NumAgents = numel(starts); end
@@ -93,6 +106,10 @@ for i = 1:numel(f)
             pol.(name) = p.(f{i});
         end
     end
+end
+% A policy that plans up to the mission end (missionEnd) is told EndTime unless set explicitly
+if isprop(pol, 'missionEnd') && ~isfield(p, 'Policy_missionEnd')
+    pol.missionEnd = p.EndTime;
 end
 % EnergyBeta (optional, in [0, 1)) sets an energy-aware policy's energyWeight by the paper's
 % App. A rule (EDRHCPolicy.weightFromBeta; EnergyBound "speed" (default) or "accel")

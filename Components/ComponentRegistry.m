@@ -31,6 +31,7 @@ classdef ComponentRegistry < handle
             obj.policies('ED-ORHC-SO')        = @() EDRHCPolicy(Transit="SO");
             obj.policies('ED-ORHC-FO')        = @() EDRHCPolicy(Transit="FO");
             obj.policies('Battery-Aware ED-RHC') = @() BatteryAwareRHCPolicy();
+            obj.policies('Collab-ED-RHC')     = @() CollabEDRHCPolicy();
             obj.policies('Simple Policy (example)') = @() SimplePolicy();
 
             % What each policy assumes of the agents' motion (a policy may also declare it as a

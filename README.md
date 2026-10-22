@@ -184,6 +184,7 @@ New agent types are subclasses for different platforms (dynamics, limits, sensin
 | Random Walk | ✓ | ✓ | No timing assumptions; dwell from the current `R` at arrival. Each agent moves at its own pace (a Physical Agent: `shortestTransit`) |
 | Battery-Aware ED-RHC | ✓ | ✓ | As ED-RHC; predicts each plan's battery energy with the agent's own `transitEnergy` |
 | ED-RHC | ✓ | ✓ | Hands the agent its planned transit: `y/maxSpeed`, or the agent's `shortestTransit` if longer (a Physical Agent's own pace). `"constant"` is the Automatica model; `"SO"` runs it with the SO shape (the JS SO#) |
+| Collab-ED-RHC | ✓ | ✓ | As ED-RHC (hands over `y/maxSpeed`, or the agent's `shortestTransit` if longer); several agents may share a target |
 | ED-ORHC-SO / -FO | ✓ | ✓ | Hands over the optimal transit time (no shorter than the agent's `shortestTransit`), profile and limits. A Physical Agent keeps the time; its profile is the planned one where that fits its limits, so its energy can differ from the plan's |
 | Classical RHC [1], Divergent RHC, Joint RHC, Joint RHC N | ✓ with `"constant"`; ≈ with `"SO"`/`"FO"` (1.5× slower than planned) | ≈ | Plan transits as path length / `maxSpeed`, which a Physical Agent cannot keep (it takes its `shortestTransit`). Joint RHC needs exactly 2 agents |
 
@@ -275,6 +276,20 @@ On **Office floor with charging dock** (1500 s, seed 1, the layout's growth rate
 
 A slower station does not empty the batteries, since the reserve covers the worst-case wait, but it limits monitoring. Here the three robots draw about 40 W each and the dock charges at 300 W. At 100 W, no battery runs out either, but the dock is busy 85% (Abstract) and 96% (Physical) of the time, and `J` rises to 623 and 6581.
 
+### Collaborative ED-RHC (Collab-ED-RHC)
+
+`Collab-ED-RHC` (`Components/AgentPolicy/CollabEDRHCPolicy.m`, target costs in `CollabTargetCost.m`) is the controller of the collaboration paper (W. Getts and S. Welikala, "Collaborative persistent monitoring", in preparation). It generalizes ED-RHC:
+
+- **Sharing.** Agents may share targets (no covering rule). Every target cost follows the Lindley recursion `R(s_{k+1}) = max(0, R(s_k) + sigma_k * Delta_k)`, which holds for any number of agents at a target, any order of arrivals and departures, and `A >= B` (targets only a group can clear).
+- **Announced plans.** Every agent announces its planned departure time and tentative next target. The policy keeps them per target as an occupancy schedule, so other agents' visits are predicted from their plans instead of the projections `dR/dt = A` of ED-RHC.
+- **Coordination, without negotiation.** At an event at target `i`, the agents at `i` plan jointly (their departure times, next targets and the common horizon end `tf`). With `coordination = "B"` (default), the same solve may also shift the departure times of the agents at neighboring targets, provided no such agent's 1-hop score gets worse than without any shift (individual rationality). The neighbors adopt the new times without replying. `coordination = "A"` plans only the co-located group, on the 1-hop neighborhood.
+- **Events.** Arrival (E1), deactivation `R_i -> 0` (E2), departure (E3), a departure from or towards a neighbor (E4), and the start (E5). RHCP-R is solved at E1, E2, E4 and E5, RHCP-D (leave now) at E3.
+- **Terminal correction** (`terminal = "hhat"`, default). The objective is the corrected ratio `[J + hhat(X(tf)) - hhat(X(t))] / (tf - t)`. `hhat` sums each target's relative value under a revisit model: the target waits `delta_k`, then its minimum clearing group clears it; the cost until then minus `A_k * gap_k / 2` times the time until then. `delta_k` is the time to the earliest announced arrival (`deltaRule = "plans"`), else the target's mean unattended time `gap_k`. It is truncated at the mission end (`missionEnd`, set by `runTrial` to `EndTime`). `terminal = "none"` gives ED-RHC's ratio; with one agent the policy then reproduces ED-RHC with `alpha = 0.5`.
+- **Solver.** The next targets of the group are enumerated. For each assignment, the departure times and `tf` are searched on a dense grid (or sampled for a group of 2 or more), refined by coordinate-wise line searches, and polished with `fmincon`. The shifts of mode B are optimized from the no-shift plan with the IR constraints, and adopted only if they lower the objective.
+- **Parameters.** `coordination`, `terminal`, `deltaRule`, `sharing` (false: no sharing, covered next targets excluded), `H` (250), `gridSize`, `traceDecisions` (`decisions`: one row per solve). `stats` counts solves, events by kind, solve CPU time and shifts.
+
+`tests/collabPolicyTest.m` checks the reduction to ED-RHC with one agent, sharing on a target only two agents can clear, and the event counts; `tests/collabCostTest.m` checks the recursion and the terminal correction against a fine time integration. `Experiments/collab/collabExperiments.m` runs the paper's experiments (the eight JS presets, two scenarios with `A_i > B_i`, and two to six agents on the General preset) and writes the tables and figures to `results/collab/`.
+
 ## Headless experiments
 
 `Experiments/runTrial(params)` runs one simulation without the GUI. Unset parameters take the values in `Experiments/trialDefaults.m`; component parameters take any `ComponentRegistry` name:
@@ -288,6 +303,7 @@ out = runTrial(struct('Layout', "ReportLayout.mat", 'AgentStarts', "layout", ...
 - `AgentStarts`: `"auto"` (spread evenly), `"layout"` (the start targets stored in the layout file), or target indices such as `[1 5]`.
 - `Seed`: the `rng` seed set before simulating (`-1`, the default, leaves `rng` as it is).
 - `Policy_<property>`: sets a property of the active policy, e.g. `'Policy_dwellScale', 0` turns off the Random Walk dwell and `'Policy_alpha', 0.5` sets ED-RHC's alpha.
+- `TargetA`, `TargetB`: per-target growth and sensing rates (one value per target), e.g. targets that only a group of agents can clear (`A_i > B_i`). Without them every target takes `A_base` and `B`.
 - `Log = true`: `out.log` holds the per-step time, `J(t)`, agent positions, velocities, accelerations, headings, SOC, battery energy and `J_e`; `out.metrics` holds per-agent path length `L`, heading change `Θ`, integrated squared acceleration `E_a`, final SOC and energy (`Experiments/metrics/`).
 
 `Experiments/runSweep(grid)` runs every combination of parameter values, and `analyzeResults` compares the variants.
