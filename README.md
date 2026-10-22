@@ -273,7 +273,7 @@ On **Office floor with charging dock** (1500 s, seed 1, the layout's growth rate
 | Battery-Aware ED-RHC | Physical | 616.0 | 15.5% | 32 (dock busy 54% of the time) | none |
 | ED-RHC | Physical | 10645 | 0 | 0 | all three, at 96-107 s |
 
-A station must charge faster than its agents draw on average. Here the three robots draw about 40 W each and the dock charges at 300 W. At 100 W even the battery-aware policy cannot keep them all going.
+A slower station does not empty the batteries, since the reserve covers the worst-case wait, but it limits monitoring. Here the three robots draw about 40 W each and the dock charges at 300 W. At 100 W, no battery runs out either, but the dock is busy 85% (Abstract) and 96% (Physical) of the time, and `J` rises to 623 and 6581.
 
 ## Headless experiments
 
