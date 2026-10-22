@@ -61,8 +61,8 @@ B = paperTables("battery", S.battery);
 pol = extractBefore(B.Condition, " /"); agt = extractAfter(B.Condition, "/ ");
 empty = compose("%.0f", B.Empty); empty(isnan(B.Empty)) = "--";
 cells = [pol, agt, f1(B.J), f1(B.MinSOC), compose("%d", round(B.Charges)), empty];
-writelines(tabular("|l|l|c|c|c|c|", ["Policy", "Agents", "$J(T)$", "Lowest SOC (\%)", ...
-    "Charges", "First empty (s)"], cells), files(6));
+writelines(tabular("|l|l|c|c|c|c|", ["Policy", "Agents", "$J(T)$", stack("Lowest", "SOC (\%)"), ...
+    "Charges", stack("First", "empty (s)")], cells), files(6));
 
 % ---- Macros quoted in the text ----
 T = paperTables("tradeoff", S.tradeoff);
@@ -121,6 +121,11 @@ head = header(:) + " \\";
 if numel(head) > 1, head(1:end-1) = head(1:end-1) + " \cline{2-" + size(cells, 2) + "}"; end
 lines = ["\begin{tabular}{" + spec + "}"; "\hline"; head; "\hline"; join(cells, " & ", 2) + " \\"; ...
          "\hline"; "\end{tabular}"];
+end
+
+function s = stack(top, bottom)
+% Column title on two lines, to keep a table within one column
+s = "\begin{tabular}{@{}c@{}}" + top + " \\ " + bottom + "\end{tabular}";
 end
 
 function s = presetName(p)

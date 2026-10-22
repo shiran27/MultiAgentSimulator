@@ -112,13 +112,13 @@ matlab -batch "addpath(genpath(pwd)); smokeTest"
 ```
 `tests/smokeTest.m` checks the defaults and the layout file round trip, then runs every registered policy x path planner x agent type for 20 s on `ReportLayout.mat` and checks that each run finishes with a finite objective `J`. It also checks the agent types (older names, every speed profile, service only at rest, Physical Agents arriving when planned, smooth heading), that William's Joint RHC harness runs, every catalog scenario, and the battery model (predicted transit energy, Battery-Aware ED-RHC recharging in time while ED-RHC runs out). It prints one line per check and exits with an error if any check fails (about 20 s). New components registered in `ComponentRegistry` are picked up automatically.
 
-`tests/guiTest.m` drives the real GUI with MATLAB's App Testing Framework: it loads `ReportLayout.mat` over the lab background and runs to the end, plays, pauses and resets, saves, clears and reloads a layout, builds a small scenario by clicking, and checks that a GUI run and a headless `runTrial` give the same `J`. It needs a display; the windows open on a secondary monitor if there is one and close when it finishes (about 50 s):
+`tests/guiTest.m` drives the real GUI with MATLAB's App Testing Framework: it loads `ReportLayout.mat` over the lab background and runs to the end, plays, pauses and resets, saves, clears and reloads a layout, builds a small scenario by clicking, places a charging station, loads every ready-made scenario, and checks that a GUI run and a headless `runTrial` give the same `J`. It needs a display; the windows open on a secondary monitor if there is one and close when it finishes (about 2 min):
 ```
 matlab -batch "addpath(genpath(pwd)); assertSuccess(runtests('guiTest'))"
 ```
 Screenshots of each stage are written to `results/gui/` (git-ignored).
 
-`tests/extensionTest.m` checks the extension points: switching target types, the metrics and `runTrial`'s `metricValues`, the event-detection example, and the Grid A* planner on every map (no wall crossings):
+`tests/extensionTest.m` checks the extension points: switching target types, the metrics and `runTrial`'s `metricValues`, the event-detection example, the Grid A* planner on every map (no wall crossings), smooth paths from every planner, the warning for an unreachable edge, charging stations added and reloaded, and the wall check during motion:
 ```
 matlab -batch "addpath(genpath(pwd)); extensionTest"
 ```

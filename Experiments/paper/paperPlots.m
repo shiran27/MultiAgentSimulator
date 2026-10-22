@@ -46,14 +46,14 @@ switch kind
         ax = axes(f); hold(ax, 'on');
         T = paperTables("tradeoff", R);
         plot(ax, T.Je, T.J, '-o', 'LineWidth', 1.2, 'MarkerSize', 4, 'MarkerFaceColor', 'w');
-        for k = 1:height(T)
-            text(ax, T.Je(k), T.J(k), sprintf('  %g', T.Beta(k)), 'FontSize', 7, 'Interpreter', 'latex', ...
-                'VerticalAlignment', 'bottom');
-        end
         set(ax, 'XScale', 'log');
         xlabel(ax, 'Energy objective: $J_e$', 'Interpreter', 'latex');
         ylabel(ax, 'Objective: $J(T)$', 'Interpreter', 'latex');
         style(ax);
+        lx = log10([min(T.Je) max(T.Je)]); ly = [min(T.J) max(T.J)];
+        xlim(ax, 10 .^ (lx + 0.12 * diff(lx) * [-1 1]));   % room for the labels of the end points
+        ylim(ax, ly + 0.12 * diff(ly) * [-1 1]);
+        labelPoints(ax, T.Je, T.J, compose("%g", T.Beta));
     case "soc"
         f = paperFigure(3.5, 4.0);
         t = tiledlayout(f, 2, 1, 'TileSpacing', 'compact', 'Padding', 'compact');
@@ -77,6 +77,37 @@ switch kind
         error('paperPlots:UnknownKind', 'Unknown plot "%s"', kind);
 end
 saveFigure(f, file);
+end
+
+function labelPoints(ax, x, y, labels)
+% Labels each point of the curve (x, y) (log x axis) on the first side, of NE, NW, SE and SW,
+% where its label stays inside the axes and covers neither the curve nor an earlier label
+drawnow;
+xl = log10(ax.XLim); yl = ax.YLim;
+px = (log10(x(:)) - xl(1)) / diff(xl); py = (y(:) - yl(1)) / diff(yl);   % normalized
+s = linspace(0, 1, 15);
+cx = px(1:end-1) + (px(2:end) - px(1:end-1)) .* s; cy = py(1:end-1) + (py(2:end) - py(1:end-1)) .* s;
+curve = [cx(:), cy(:)];
+boxes = zeros(0, 4);
+sides = [1 1; -1 1; 1 -1; -1 -1];
+halign = ["right", "", "left"]; valign = ["top", "", "bottom"];
+for k = 1:numel(px)
+    for c = 1:size(sides, 1)
+        sx = sides(c, 1); sy = sides(c, 2);
+        h = text(ax, px(k) + 0.012 * sx, py(k) + 0.02 * sy, labels(k), 'Units', 'normalized', ...
+            'FontSize', 7, 'Interpreter', 'latex', 'HorizontalAlignment', halign(sx + 2), ...
+            'VerticalAlignment', valign(sy + 2));
+        e = h.Extent;
+        inside = e(1) >= 0 && e(2) >= 0 && e(1) + e(3) <= 1 && e(2) + e(4) <= 1;
+        hitsCurve = any(curve(:, 1) > e(1) & curve(:, 1) < e(1) + e(3) & ...
+                        curve(:, 2) > e(2) & curve(:, 2) < e(2) + e(4));
+        hitsLabel = any(boxes(:, 1) < e(1) + e(3) & e(1) < boxes(:, 1) + boxes(:, 3) & ...
+                        boxes(:, 2) < e(2) + e(4) & e(2) < boxes(:, 2) + boxes(:, 4));
+        if (inside && ~hitsCurve && ~hitsLabel) || c == size(sides, 1), break; end
+        delete(h);
+    end
+    boxes(end+1, :) = e; %#ok<AGROW>
+end
 end
 
 function style(ax)
