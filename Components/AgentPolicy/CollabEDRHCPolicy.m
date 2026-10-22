@@ -52,6 +52,7 @@ classdef CollabEDRHCPolicy < Policy
         missionEnd = Inf     % mission end T [s] (truncates tf and hhat)
         gridSize = 15        % grid points per variable (one agent) before fmincon
         groupSamples = 150   % random samples per assignment for a group of 2 or more agents
+        retryTime = 1        % wait before a leader with no feasible plan tries again [s]
         traceDecisions = false
         decisions = zeros(0, 13)  % [t, leader, event, target i, group size, next j, d_a, tf,
                                   %  shifted agents, J(Pi0), J(Pi*), members, cpu seconds]
@@ -264,8 +265,8 @@ classdef CollabEDRHCPolicy < Policy
             kpos = zeros(1, numel(model.targets)); kpos(K) = 1:nK;
 
             if isempty(choices) || Hm <= obj.tol
-                % no next target can be planned: stay and try again shortly
-                obj.setDwell(leader, t, min(1, max(Hm, obj.tol)), 0);
+                % no next target can be planned: stay, and try again after retryTime
+                obj.setDwell(leader, t, obj.retryTime, 0);
                 obj.stats.cpu = obj.stats.cpu + toc(cpu);
                 return;
             end
@@ -355,8 +356,8 @@ classdef CollabEDRHCPolicy < Policy
                 [cost, z] = obj.solveGroup(D, tmpl);
                 results(end+1) = struct('cost', cost, 'z', z, 'tmpl', tmpl, 'phi', phi); %#ok<AGROW>
             end
-            if isempty(results)
-                obj.setDwell(leader, t, min(1, max(Hm, obj.tol)), 0);
+            if isempty(results)   % no next target can be reached within the horizon
+                obj.setDwell(leader, t, obj.retryTime, 0);
                 obj.stats.cpu = obj.stats.cpu + toc(cpu);
                 return;
             end
@@ -367,8 +368,12 @@ classdef CollabEDRHCPolicy < Policy
             shifted = 0;
             % --- coordination "B": departure-time shifts of the members under IR
             if nM > 0
+                % IR baseline: the members' scores under Pi0 (the best response), for every
+                % assignment of next targets searched
+                [~, num0] = obj.evaluate(D, best.tmpl, best.z);
+                score0 = cellfun(@(s) sum(num0(s)), D.memberSets) / (best.z(nS + 1) - t);
                 for r = order(1:min(2, numel(order)))
-                    [c2, z2, ok] = obj.solveShifts(D, results(r).tmpl, results(r).z);
+                    [c2, z2, ok] = obj.solveShifts(D, results(r).tmpl, results(r).z, score0);
                     if ok && c2 < Jstar - 1e-9
                         Jstar = c2; best = results(r); best.z = z2;
                     end
@@ -606,13 +611,14 @@ classdef CollabEDRHCPolicy < Policy
             P = [da, t + X(:, 3:2 + nS - 1) .* (tf - t), tf, repmat(tmpl.dCur, size(X, 1), 1)];
         end
 
-        function [cost, z, ok] = solveShifts(obj, D, tmpl, z0)
-            % Step 2 (Pi* from Pi0 = z0): the members' departure times under the IR constraints
-            % score_m(Pi) <= score_m(Pi0); the group's decisions are refined at the same time
+        function [cost, z, ok] = solveShifts(obj, D, tmpl, z0, score0)
+            % Step 2 (Pi*): the members' departure times under the IR constraints
+            % score_m(Pi) <= score_m(Pi0) (score0, from the best response Pi0), starting from the
+            % best response z0 of this assignment of next targets; the group's decisions are
+            % refined at the same time. ok = false: no IR-feasible plan found
             nS = tmpl.nS; nM = tmpl.nM; t = D.t;
-            [J0, num0] = obj.evaluate(D, tmpl, z0);
+            J0 = obj.evaluate(D, tmpl, z0);
             w0 = z0(nS + 1) - t;
-            score0 = cellfun(@(s) sum(num0(s)) / w0, D.memberSets);
             % candidate starts: one member at a time leaves now, leaves when the leader arrives,
             % or stays until tf
             arriveLeader = z0(1) + tmpl.rhoS(1);
@@ -642,7 +648,7 @@ classdef CollabEDRHCPolicy < Policy
             bin = [-tmpl.rhoS(1); zeros(nS - 1, 1)];
             f = @(z) obj.evaluate(D, tmpl, z(:)');
             nonl = @(z) obj.irConstraint(D, tmpl, z(:)', score0);
-            ok = isfinite(Jb);
+            ok = isfinite(Jb);   % some candidate start satisfies IR
             try
                 [x, fx, flag] = fmincon(f, zs', Ain, bin, [], [], lb', ub', nonl, obj.optionsIR);
                 c = nonl(x);
