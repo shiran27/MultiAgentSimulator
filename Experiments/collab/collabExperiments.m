@@ -175,21 +175,29 @@ fclose(fid);
 end
 
 function makeFigures(L, T, runDir, resDir)
-% Fig. A: J(t) on 3A-General under the four main methods; Fig. B: R_i(t) of the group targets on
+% Fig. A: J(t) on 2A-5T and 3A-General under the four main methods; Fig. B: R_i(t) of the group targets on
 % 3A-General under ED-RHC and Collab (B); Fig. C: J_T and CPU per solve against the team size
 methods = ["ED-RHC", "ED-RHC-alpha", "Collab-A", "Collab-B"];
 labels = ["ED-RHC", "ED-RHC-$\alpha$", "Collab (A)", "Collab (B)"];
 colors = [0.0 0.45 0.74; 0.85 0.33 0.10; 0.47 0.67 0.19; 0.49 0.18 0.56];
-f = figure('Visible', 'off', 'Units', 'inches', 'Position', [0 0 3.5 2.4]);
-hold on; grid on; box on;
-for m = 1:numel(methods)
-    r = loadRun(L, runDir, "bench", "JS_3Agent_General", methods(m));
-    if isempty(r), continue; end
-    plot(r.t, r.Jt, 'LineWidth', 1.2, 'Color', colors(m, :), 'DisplayName', labels(m));
+f = figure('Visible', 'off', 'Units', 'inches', 'Position', [0 0 3.5 2.5]);
+tl = tiledlayout(1, 2, 'TileSpacing', 'compact', 'Padding', 'compact');
+for sc = ["JS_2Agent_5T", "JS_3Agent_General"]
+    nexttile; hold on; grid on; box on;
+    for m = 1:numel(methods)
+        r = loadRun(L, runDir, "bench", sc, methods(m));
+        if isempty(r), continue; end
+        plot(r.t, r.Jt, 'LineWidth', 1.1, 'Color', colors(m, :), 'DisplayName', labels(m));
+    end
+    title(replace(sc, ["JS_2Agent_5T", "JS_3Agent_General"], ["2A-5T", "3A-General"]), ...
+        'Interpreter', 'latex', 'FontWeight', 'normal');
+    xlabel('Time: $t$ [s]', 'Interpreter', 'latex');
+    set(gca, 'FontSize', 8, 'TickLabelInterpreter', 'latex');
+    if sc == "JS_3Agent_General"
+        legend('Interpreter', 'latex', 'Location', 'southeast', 'Box', 'on', 'FontSize', 7);
+    end
 end
-xlabel('Time: $t$ [s]', 'Interpreter', 'latex'); ylabel('Objective: $J(t)$', 'Interpreter', 'latex');
-legend('Interpreter', 'latex', 'Location', 'southeast', 'Box', 'on');
-set(gca, 'FontSize', 9, 'TickLabelInterpreter', 'latex');
+ylabel(tl, 'Objective: $J(t)$', 'Interpreter', 'latex', 'FontSize', 9);
 exportgraphics(f, fullfile(resDir, 'fig_J_general.pdf'), 'ContentType', 'vector'); close(f);
 
 f = figure('Visible', 'off', 'Units', 'inches', 'Position', [0 0 3.5 2.4]);
