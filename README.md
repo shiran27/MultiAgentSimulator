@@ -235,9 +235,9 @@ Agents may share targets. During a spike that the agents present cannot overcome
   - For the Abstract Agent it is the closed form above (results unchanged).
   - For the Physical Agent it is the `int |a|^2 dt` of the reference that agent will follow. That reference is the fastest profile retimed to `rho`, or, where the planned SO/FO profile fits the agent's limits on the path, whichever of the two draws less. The energy includes the turns' `v^2 kappa` on curved paths, and `E(rho)` falls with `rho` (monotone), so the RHCP's search meets no jump.
   - The model is tabulated on a few transit times per edge, interpolated in log-log coordinates, and cached by the policy.
-  - On a curved edge of the lab (8-2), the closed form misses the drawn energy by about 85%, while the agent's model is within 0.4%.
+  - On a curved edge of the lab (8-2), the closed form misses the drawn energy by about 85%, while the agent's model is within 0.2% (0.4% on a nearly straight edge).
   - Over 500 s on the lab (5 Physical Agents), planned and drawn `J_e` agree within 1% (closed form: 18% mean error for SO, 13% for FO).
-  - The RHCPs now see what turns cost, so the energy drawn falls by 29% (SO) and 24% (FO). `J` rises by 3.6% and 3.2%, and `runTrial`'s `J_T` falls by 27% and 23%.
+  - The RHCPs now see what turns cost. Compared with the closed form, the energy drawn falls by 30% (SO) and 25% (FO), `J` rises by 5.0% and 2.9%, and `runTrial`'s `J_T` falls by 28% and 23%.
 - **Metrics.** `runTrial` also returns `out.Je`, `out.JT`, `out.vmax` and `out.umax` (paper eqs. 3 and 73), and `out.log.Je` holds the per-step energy.
 - **`clearFirst`** (default `false`, which follows the paper). Set it to `true` for the JS simulator's energy-aware convention: every visit clears the target, there is no RHCP1 on arrival, and plans only include visits that clear `j`.
 
@@ -260,18 +260,18 @@ Agents may share targets. During a spike that the agents present cannot overcome
 - **Metric.** `Minimum SOC` (`MinimumSOC`) is the lowest SOC of any agent so far. Use it with `setMetrics` or `runTrial`'s `Metrics` parameter.
 - **Without stations** the policy is ED-RHC. With unlimited batteries on the dock scenario it never charges, and its J is 2% above ED-RHC's (140.6 vs 137.6): it never plans a visit to the station, and its RHCPs carry the extra, inactive constraint.
 
-On **Office floor with charging dock** (1500 s, seed 1):
+On **Office floor with charging dock** (1500 s, seed 1, the layout's growth rates; measured at d8dcd23). The paper's Table VI sets `A = 1` on every target, so its `J` values are lower:
 
 | Policy | Agent | J | Lowest SOC | Charges | Batteries empty |
 |---|---|---|---|---|---|
 | ED-RHC, unlimited batteries | Abstract | 137.6 | 100% | 0 | none |
 | Battery-Aware ED-RHC | Abstract | 255.2 | 9.9% | 19 (dock busy 32% of the time) | none |
 | ED-RHC | Abstract | 8786 | 0 | 0 | all three, at about 225 s |
-| Battery Efficient (retired) | Abstract | 10233 | 0 | 0 | two, at about 243 s |
+| Battery Efficient (retired; measured at ac496ba) | Abstract | 10233 | 0 | 0 | two, at about 243 s |
 | Random Walk | Abstract | 9093 | 0 | 0 | all three, at 214-230 s |
-| ED-RHC, unlimited batteries | Physical | 272.7 | 100% | 0 | none |
-| Battery-Aware ED-RHC | Physical | 688.2 | 12.4% | 25 | none |
-| ED-RHC | Physical | 10038 | 0 | 0 | all three, at about 145 s |
+| ED-RHC, unlimited batteries | Physical | 238.0 | 100% | 0 | none |
+| Battery-Aware ED-RHC | Physical | 616.0 | 15.5% | 32 (dock busy 54% of the time) | none |
+| ED-RHC | Physical | 10645 | 0 | 0 | all three, at 96-107 s |
 
 A station must charge faster than its agents draw on average. Here the three robots draw about 40 W each and the dock charges at 300 W. At 100 W even the battery-aware policy cannot keep them all going.
 
