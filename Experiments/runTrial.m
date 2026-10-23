@@ -105,7 +105,9 @@ model.setUncertaintyMode(char(p.UncertaintyMode));
 fit = model.checkAgentFit();
 if fit ~= "", warning('runTrial:AgentPolicyFit', '%s', fit); end
 model.resetSimulationState();  % also clears RHC reservation tables from earlier trials
-if p.Seed >= 0, rng(p.Seed); end   % -1 (the default) keeps the caller's rng state
+% -1 (the default) keeps the caller's rng state. The generator is named because parfor workers
+% default to another one, so a seeded run gives the same result in serial and in parallel
+if p.Seed >= 0, rng(p.Seed, 'twister'); end
 
 % ---- Simulate (same stepping as SimulationController.runToEnd) ----
 clock = SimulationClock(p.EndTime, p.Dt);
