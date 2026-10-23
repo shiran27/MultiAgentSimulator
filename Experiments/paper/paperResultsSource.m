@@ -46,7 +46,7 @@ Teo = validateEDORHC(Presets=presets);
 validation = paperTables("validation", Ted, Teo)
 
 %% Table IV and Fig. 9: policies and agent types
-% Random Walk (ten seeds), ED-RHC, ED-ORHC-SO and ED-ORHC-FO with Abstract and Physical Agents
+% Random Walk (ten seeds), ED-RHC, ED-ORHC-SO and ED-ORHC-FO-3 with Abstract and Physical Agents
 % on the reference scenario (Dijkstra Corners).
 policies = paperRuns(base, paperConditions("policies"), Quick=QuickMode);
 paperTables("policies", policies)

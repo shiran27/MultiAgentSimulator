@@ -25,8 +25,8 @@ classdef BatteryAwareRHCPolicy < EDRHCPolicy
     % Agents on their way to a station do not block the targets they pass, so an agent leaving
     % a station can always get out.
     %
-    % Without stations in the model it is ED-RHC. The transit model is ED-RHC's "constant speed"
-    % by default; "SO" and "FO" also work (the constraint then takes the acceleration energy
+    % Without stations in the model it is ED-RHC. The transit model is ED-RHC's "FO-0"
+    % by default; "SO" and "FO-3" also work (the constraint then takes the acceleration energy
     % at the shortest transit searched, an upper bound).
     properties
         socMin = 0.05     % charge always kept in reserve, as a fraction of the capacity
@@ -43,7 +43,7 @@ classdef BatteryAwareRHCPolicy < EDRHCPolicy
         function obj = BatteryAwareRHCPolicy(opts)
             arguments
                 opts.Alpha = "nominal"
-                opts.Transit string = "constant speed"
+                opts.Transit string = "FO-0"
             end
             obj@EDRHCPolicy(Alpha=opts.Alpha, Transit=opts.Transit);
             obj.resetModes();
@@ -114,7 +114,7 @@ classdef BatteryAwareRHCPolicy < EDRHCPolicy
             bat = agent.battery;
             budget = bat.remaining - obj.socMin * bat.capacity - obj.reserve(agent, model, j);
             Pi = bat.idlePower();
-            if obj.transit == "constant speed"
+            if obj.transit == "FO-0"
                 a = [Pi Pi Pi Pi 0];
                 b = budget - obj.edgeEnergy(agent, model, i, j, d.rho);
             else
@@ -239,7 +239,7 @@ classdef BatteryAwareRHCPolicy < EDRHCPolicy
         function r = route(obj, agent, model)
             % Cheapest routes to the stations for this agent: r.E(j) energy from j to the
             % nearest station r.station(j), r.next(j) the first target on that route, and per edge the
-            % transit time r.rho(i, j) (ED-RHC's constant-speed transit) and energy r.Eedge(i, j).
+            % transit time r.rho(i, j) (ED-RHC's FO-0 transit) and energy r.Eedge(i, j).
             % Computed once per run and agent (Dijkstra from the stations)
             n = numel(model.targets);
             key = agent.index;

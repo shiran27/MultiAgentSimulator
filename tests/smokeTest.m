@@ -119,7 +119,7 @@ try   % a dwell requested in the move command is spent at the target before leav
 catch err
     check(false, "cmd.dwellSeconds  ERROR " + err.message);
 end
-for name = ["ED-ORHC-SO", "ED-ORHC-FO"]
+for name = ["ED-ORHC-SO", "ED-ORHC-FO-3"]
     try
         sim = reportScenario('Dijkstra Corners', {'Abstract Agent'});
         sim.setActivePolicy(char(name));
@@ -141,8 +141,8 @@ for name = ["ED-ORHC-SO", "ED-ORHC-FO"]
 end
 
 % ---- 5. Agent types ----
-aliasClass = {'Linear Agent', 'AbstractAgent', "constant"; 'Second-Order Agent', 'AbstractAgent', "SO"; ...
-    'Default Agent', 'PhysicalAgent', "constant"; 'Energy Agent', 'PhysicalAgent', "constant"};
+aliasClass = {'Linear Agent', 'AbstractAgent', "FO-0"; 'Second-Order Agent', 'AbstractAgent', "SO"; ...
+    'Default Agent', 'PhysicalAgent', "FO-0"; 'Energy Agent', 'PhysicalAgent', "FO-0"};
 for k = 1:size(aliasClass, 1)
     a = feval(reg.factoryFor('agenttype', aliasClass{k, 1}), 1, [0 0], 10);
     check(isa(a, aliasClass{k, 2}) && a.profile == aliasClass{k, 3}, ...

@@ -9,6 +9,7 @@ classdef ComponentRegistry < handle
         metrics        % name -> @() metric
         aliases        % older agent type names -> @(idx, pos, speed) agent; resolved by factoryFor
         retired        % retired component names -> what replaces them (factoryFor errors with it)
+        renamed        % older component names -> current names, any kind (resolve, factoryFor)
                        % but not listed by keysFor (so not offered in the GUI)
         assumptions    % policy name -> agent assumption, for policies that do not declare one
         agentCounts    % policy name -> number of agents it is built for
@@ -29,7 +30,7 @@ classdef ComponentRegistry < handle
             obj.policies('Joint RHC N')       = @() JointRHCPolicyN();
             obj.policies('ED-RHC')            = @() EDRHCPolicy();
             obj.policies('ED-ORHC-SO')        = @() EDRHCPolicy(Transit="SO");
-            obj.policies('ED-ORHC-FO')        = @() EDRHCPolicy(Transit="FO");
+            obj.policies('ED-ORHC-FO-3')      = @() EDRHCPolicy(Transit="FO-3");
             obj.policies('Battery-Aware ED-RHC') = @() BatteryAwareRHCPolicy();
             obj.policies('Simple Policy (example)') = @() SimplePolicy();
 
@@ -37,7 +38,7 @@ classdef ComponentRegistry < handle
             % constant property agentAssumption; see assumptionOf)
             obj.assumptions = containers.Map('KeyType','char','ValueType','any');
             for name = ["Classical RHC [1]", "Divergent RHC", "Joint RHC", "Joint RHC N"]
-                obj.assumptions(char(name)) = "constant speed";   % transit = path length / maxSpeed
+                obj.assumptions(char(name)) = "FO-0";   % transit = path length / maxSpeed
             end
             obj.agentCounts = containers.Map('KeyType','char','ValueType','double');
             obj.agentCounts('Joint RHC') = 2;
@@ -65,6 +66,11 @@ classdef ComponentRegistry < handle
             obj.aliases('Energy Agent')       = @(idx, pos, sp) PhysicalAgent(idx, pos, sp);
 
             % Components no longer offered, with what replaces them (factoryFor says so)
+            % Components renamed, with their current names: the profiles follow the energy-aware
+            % paper (FO-0 constant speed, SO, FO-3 trapezoid) since 2026-10-22
+            obj.renamed = containers.Map('KeyType','char','ValueType','any');
+            obj.renamed('ED-ORHC-FO') = 'ED-ORHC-FO-3';
+
             obj.retired = containers.Map('KeyType','char','ValueType','any');
             obj.retired('Battery Efficient') = "retired on 2026-10-21 (Old_Design/" + ...
                 "BatteryEfficientPolicy.m): use 'Battery-Aware ED-RHC' with a charging station, or 'ED-RHC'";
@@ -74,7 +80,8 @@ classdef ComponentRegistry < handle
             % What policy <name> assumes of the agents' motion:
             %   "any"             nothing (e.g. Random Walk: dwells from R at arrival)
             %   "plans transit"   it hands each transit's time (and profile) to the agent
-            %   "constant speed"  transit time = path length / maxSpeed, not handed over
+            %   "FO-0"            transit time = path length / maxSpeed (constant speed), not
+            %                     handed over
             %   "unknown"         not declared
             if nargin > 2 && isprop(policy, 'agentAssumption')
                 a = string(policy.agentAssumption);
@@ -95,7 +102,13 @@ classdef ComponentRegistry < handle
             names = obj.mapFor(kind).keys;
         end
 
+        function name = resolve(obj, name)
+            % The current name of a component (older names in renamed map to their new names)
+            if isKey(obj.renamed, char(name)), name = obj.renamed(char(name)); end
+        end
+
         function h = factoryFor(obj, kind, name)
+            name = obj.resolve(name);
             m = obj.mapFor(kind);
             if ~isKey(m, name) && strcmpi(kind, 'agenttype') && isKey(obj.aliases, name)
                 h = obj.aliases(name);

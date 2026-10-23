@@ -14,6 +14,9 @@ function extensionTest()
 % 5. Every planner's paths have no sharp corners; an unreachable target gives a straight edge
 %    with a warning; stations (addStation) save and reload; Physical Agents on the lab never
 %    cross a wall; an agent driven into a wall stops at it and the collision is counted.
+% 6. Paper profiles (Configurations/paperProfiles) list only existing components, speed
+%    profiles and scenarios; the older names "constant", "FO" and 'ED-ORHC-FO' still work and
+%    give the same run as FO-0, FO-3 and 'ED-ORHC-FO-3'.
 % Prints one line per check and errors at the end (non-zero exit under -batch) if any failed.
 
 root = fileparts(fileparts(mfilename('fullpath')));
@@ -131,6 +134,39 @@ m.agents(1).path = m.edges(1).curvePoints; m.resetSimulationState();
 m.agents(1).path = m.edges(1).curvePoints; m.agents(1).current_target_idx = 2;
 for k = 1:100, m.step(0.05, k * 0.05); end
 check(m.collisions(1) > 0 && m.agents(1).state.pos(1) < 50, 'an agent driven into a wall stops at it and the collision is counted');
+
+% ---- 6. Paper profiles and renamed names ----
+reg = ComponentRegistry();
+cat = scenarioCatalog();
+P = paperProfiles();
+for p = P'
+    bad = strings(1, 0);
+    for kind = ["policy", "agenttype", "pathplanner", "targettype", "metric"]
+        bad = [bad, p.(kind)(~ismember(p.(kind), string(reg.keysFor(kind))))]; %#ok<AGROW>
+    end
+    bad = [bad, p.speedprofile(~ismember(p.speedprofile, SpeedProfile.names))]; %#ok<AGROW>
+    for q = p.scenario
+        if ~any(MainUI.listed(cat.Name, q)), bad(end+1) = q; end %#ok<AGROW>
+    end
+    check(isempty(bad), sprintf('paper profile "%s" lists only existing names %s', p.Name, strjoin(bad, ", ")));
+end
+check(P(1).Name == "Full" && all(structfun(@isempty, rmfield(P(1), {'Name', 'Description'}))), ...
+    'paper profile "Full" hides nothing');
+a1 = AbstractAgent(1, [0 0], 10, Profile="constant");
+a2 = PhysicalAgent(1, [0 0], 10, Profile="FO");
+check(a1.profile == "FO-0" && a2.profile == "FO-3" && SpeedProfile.energy("FO", 10, 5) == SpeedProfile.energy("FO-3", 10, 5), ...
+    'older speed profile names: "constant" is FO-0, "FO" is FO-3');
+pol = feval(reg.factoryFor('policy', 'ED-ORHC-FO'));
+pol.transit = "FO";
+t1 = pol.transit;
+pol.transit = "constant speed";
+check(isa(pol, 'EDRHCPolicy') && t1 == "FO-3" && pol.transit == "FO-0", ...
+    'older policy name ED-ORHC-FO is ED-ORHC-FO-3; transits "FO" and "constant speed" are FO-3 and FO-0');
+q = struct('Layout', fullfile("Legacy", "JS_1Agent_3T.mat"), 'AgentStarts', "layout", ...
+    'AgentType', "Abstract Agent", 'EndTime', 30, 'Seed', 1);
+q.Policy = "ED-ORHC-FO"; out = runTrial(q); Jold = out.finalJ;
+q.Policy = "ED-ORHC-FO-3"; out = runTrial(q); Jnew = out.finalJ;
+check(Jold == Jnew, sprintf('runTrial with ED-ORHC-FO and ED-ORHC-FO-3: J(30 s) = %.4f and %.4f', Jold, Jnew));
 
 if isempty(failures)
     fprintf('\nextensionTest PASSED: %d checks\n', nChecks);

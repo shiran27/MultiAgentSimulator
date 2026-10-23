@@ -42,7 +42,8 @@ The objective function `J(t)` tracked over the course of a run.
    runMainUI
    ```
    This adds all subfolders to the path and opens the UI. `runMainUI('Monitor', 2)` opens the windows on
-   another monitor (a row of `get(groot, 'MonitorPositions')`), sized to fit it.
+   another monitor (a row of `get(groot, 'MonitorPositions')`), sized to fit it, and
+   `runMainUI('PaperProfile', "Energy paper")` starts with a [paper profile](#paper-profiles).
 3. Pick a ready-made scenario from the **Scenario** dropdown (see [Scenarios](#scenarios)), or build your own. Use the dropdowns in the **Tools** panel to pick a Path Planner, Agent Policy, Agent Type, and Uncertainty mode. These can only be changed while the simulation is **not** running.
 4. Use the **Tools** panel to add targets, agents, edges, and walls. **Agent Speed**, **Agent Accel** and **Speed Profile** set the next agents you place (see [Agent types](#agent-types)). Use the **Time Control** panel to play/pause the simulation.
 
@@ -62,6 +63,19 @@ The **Scenario** dropdown (top of the Tools panel; `MainUI.loadScenario(name)` i
 | JS: ... | `Legacy/JS_*.mat` | The eight presets of the legacy JS simulator (RHC papers), scaled to the canvas |
 
 `Configurations/scenarioCatalog.m` lists them. `Configurations/makeScenarioLayouts.m` draws the maps (`Configurations/backgrounds/*.png`) and writes their layouts from the same geometry, so walls line up with the drawn walls, buildings, coasts and piers. It also restyles the lab floor plan (`LabLayout.png`) in the same palette as `backgrounds/LabFloor.png`. Edit it to change a scenario, or add a row to the catalog for a new layout file.
+
+## Paper profiles
+
+The **Paper profile** dropdown (top of the Tools panel; `MainUI.setPaperProfile(name)` in code) shows only the components, speed profiles and scenarios that one paper uses, so its setups are quick to find. **Full** (the default) shows everything. The profiles are listed in `Configurations/paperProfiles.m`:
+
+| Profile | Shows |
+|---|---|
+| Full | Everything |
+| Simulator paper | Random Walk, ED-RHC, ED-ORHC-SO, ED-ORHC-FO-3, Battery-Aware ED-RHC and the example's classes; Abstract and Physical Agents; every planner, metric and scenario |
+| Collaboration paper | ED-RHC with Abstract Agents on FO-0 transits, the JS presets, J(t) |
+| Energy paper | ED-ORHC-SO, ED-ORHC-FO-3 and Battery-Aware ED-RHC; Abstract and Physical Agents with SO and FO-3 profiles; J(t) and Minimum SOC |
+
+A profile only filters the dropdowns: when it hides the current choice, the first shown one is selected, and a loaded layout still shows the options it uses. The registry, layouts and `runTrial` ignore profiles, so no result depends on one. To add a profile, add a row to `paperProfiles.m`; a field left empty shows everything of that kind, and a scenario entry ending in `*` matches every scenario whose name starts with the rest (e.g. `"JS: *"`). `extensionTest` checks that every listed name exists.
 
 ## Target uncertainty and defaults
 
@@ -92,7 +106,7 @@ The experiment harness (`Experiments/runTrial`, `Experiments/trialDefaults.m`) s
 | `agentStarts` | start target index of each agent |
 | `agentSpeed` | maximum speed of each agent (or one value for all) |
 | `agentAccel` | maximum acceleration of each agent (or one value for all) |
-| `agentProfile` | speed profile of each agent: `"constant"`, `"SO"` or `"FO"` |
+| `agentProfile` | speed profile of each agent: `"FO-0"`, `"SO"` or `"FO-3"` |
 | `agentBatteryWh` | battery capacity of each agent [Wh] (or one value for all) |
 | `agentStopWhenEmpty` | 1 if an agent stops when its battery is empty (or one value for all) |
 | `chargers`, `chargePower` | targets that are charging stations (`ChargingStation`), and their charging power [W] |
@@ -112,13 +126,13 @@ matlab -batch "addpath(genpath(pwd)); smokeTest"
 ```
 `tests/smokeTest.m` checks the defaults and the layout file round trip, then runs every registered policy x path planner x agent type for 20 s on `ReportLayout.mat` and checks that each run finishes with a finite objective `J`. It also checks the agent types (older names, every speed profile, service only at rest, Physical Agents arriving when planned, smooth heading), that William's Joint RHC harness runs, every catalog scenario, and the battery model (predicted transit energy, Battery-Aware ED-RHC recharging in time while ED-RHC runs out). It prints one line per check and exits with an error if any check fails (about 20 s). New components registered in `ComponentRegistry` are picked up automatically.
 
-`tests/guiTest.m` drives the real GUI with MATLAB's App Testing Framework: it loads `ReportLayout.mat` over the lab background and runs to the end, plays, pauses and resets, saves, clears and reloads a layout, builds a small scenario by clicking, places a charging station, loads every ready-made scenario, and checks that a GUI run and a headless `runTrial` give the same `J`. It needs a display; the windows open on a secondary monitor if there is one and close when it finishes (about 2 min):
+`tests/guiTest.m` drives the real GUI with MATLAB's App Testing Framework: it loads `ReportLayout.mat` over the lab background and runs to the end, plays, pauses and resets, saves, clears and reloads a layout, builds a small scenario by clicking, places a charging station, loads every ready-made scenario, filters the menus by paper profile, and checks that a GUI run and a headless `runTrial` give the same `J`. It needs a display; the windows open on a secondary monitor if there is one and close when it finishes (about 2 min):
 ```
 matlab -batch "addpath(genpath(pwd)); assertSuccess(runtests('guiTest'))"
 ```
 Screenshots of each stage are written to `results/gui/` (git-ignored).
 
-`tests/extensionTest.m` checks the extension points: switching target types, the metrics and `runTrial`'s `metricValues`, the event-detection example, the Grid A* planner on every map (no wall crossings), smooth paths from every planner, the warning for an unreachable edge, charging stations added and reloaded, and the wall check during motion:
+`tests/extensionTest.m` checks the extension points: switching target types, the metrics and `runTrial`'s `metricValues`, the event-detection example, the Grid A* planner on every map (no wall crossings), smooth paths from every planner, the warning for an unreachable edge, charging stations added and reloaded, the wall check during motion, the names in the paper profiles, and the older profile and policy names:
 ```
 matlab -batch "addpath(genpath(pwd)); extensionTest"
 ```
@@ -131,17 +145,17 @@ There are two agent types (`Components/AgentTypes/`): the **Abstract Agent**, an
 |---|---|---|
 | Motion | Follows its speed profile exactly along the path (arc length), at rest on the targets | Double integrator (speed and acceleration saturate at `maxSpeed` and `maxAccel`) with a PD law and feedforward tracking a reference it can follow: the path with its corners rounded, and a speed profile within the full limits (`planMargin` = 1; the acceleration counts its part along the path and the turn's part across it, sqrt(u² + (v²κ)²) ≤ `maxAccel`) that slows down for turns |
 | Timing | Every transit takes exactly the planned time | Arrives within a step or two of the planned time, if the plan is at least its `shortestTransit(path)`; otherwise it takes `shortestTransit`. The RHC policies plan with it |
-| Model of | The event-driven RHC papers: first-order agent (`"constant"` profile) or energy-optimal second-order agent (`"SO"`, `"FO"`) | A physical robot executing the same plan with feedback |
-| `J_e` | Tangential acceleration only (NaN with `"constant"`: impulses) | Full commanded acceleration |
+| Model of | The event-driven RHC papers: first-order agent (`"FO-0"` profile) or energy-optimal second-order agent (`"SO"`, `"FO-3"`) | A physical robot executing the same plan with feedback |
+| `J_e` | Tangential acceleration only (NaN with `"FO-0"`: impulses) | Full commanded acceleration |
 
-**Speed profiles** (`SpeedProfile.m`, from the agent's `profile` or handed over per transit by a planning policy):
-- `"constant"`: constant speed.
+**Speed profiles** (`SpeedProfile.m`, from the agent's `profile` or handed over per transit by a planning policy). The names are those of the energy-aware paper (Welikala and Cassandras, CDC 2021), whose FO-n profiles (n = 0 to 3) make a second-order agent behave approximately like a first-order one:
+- `"FO-0"`: constant speed (the first-order agent of the Automatica paper).
 - `"SO"`: minimum energy.
-- `"FO"`: minimum-energy trapezoid.
+- `"FO-3"`: minimum-energy trapezoid.
 
-Without a planned transit time an Abstract Agent crosses an edge of length `y` in `y/maxSpeed` (`"constant"`) or `1.5 y/maxSpeed` (`"SO"`, `"FO"`, peak speed `maxSpeed`). On curved paths its profile depends on the path length only; the heading follows the path and turns at `omega = kappa * v` (`state.omega`), as in Theorem 2 of the energy-aware paper.
+The older names `"constant"` (and `"constant speed"`) and `"FO"` still work: they are FO-0 and FO-3. Without a planned transit time an Abstract Agent crosses an edge of length `y` in `y/maxSpeed` (`"FO-0"`) or `1.5 y/maxSpeed` (`"SO"`, `"FO-3"`, peak speed `maxSpeed`). On curved paths its profile depends on the path length only; the heading follows the path and turns at `omega = kappa * v` (`state.omega`), as in Theorem 2 of the energy-aware paper.
 
-A Physical Agent follows the planned profile when that profile keeps within its reference limits on the path (`"SO"` and `"FO"` usually do on straight edges). Otherwise, it follows its fastest profile within those limits (full acceleration and braking, slower through corners, where the turn takes acceleration too), slowed down uniformly to the planned time. With `"SO"` or `"FO"` it takes whichever of the two draws less `int |a|^2 dt` on the path: those shapes minimize energy on a straight line, but on a curvy path their higher mid-edge speed can cost more in the turns. `"constant"` never fits, since it jumps to its speed, so with `"constant"` a Physical Agent moves at its own fastest pace, `shortestTransit(path)`. Its feedforward is the reference's own change of velocity over each step, so an agent on the reference stays on it.
+A Physical Agent follows the planned profile when that profile keeps within its reference limits on the path (`"SO"` and `"FO-3"` usually do on straight edges). Otherwise, it follows its fastest profile within those limits (full acceleration and braking, slower through corners, where the turn takes acceleration too), slowed down uniformly to the planned time. With `"SO"` or `"FO-3"` it takes whichever of the two draws less `int |a|^2 dt` on the path: those shapes minimize energy on a straight line, but on a curvy path their higher mid-edge speed can cost more in the turns. `"FO-0"` never fits, since it jumps to its speed, so with `"FO-0"` a Physical Agent moves at its own fastest pace, `shortestTransit(path)`. Its feedforward is the reference's own change of velocity over each step, so an agent on the reference stays on it.
 
 **Spawning and customizing.** Agents are spawned from an `AgentSpec` (`Components/AgentTypes/AgentSpec.m`):
 - the type (a registered name);
@@ -168,12 +182,12 @@ New agent types are subclasses for different platforms (dynamics, limits, sensin
 
 **Service.** A target is serviced only by agents at rest there: arrived (no path) or waiting to leave. Agents in transit service nothing, even when they pass close to a target. `ScenarioModel.detectionRadius` (1.2) is only the tolerance for "at the target".
 
-**Older names.** `"Linear Agent"` (= Abstract, `"constant"`), `"Second-Order Agent"` (= Abstract, `"SO"`), `"Default Agent"` and `"Energy Agent"` (= Physical) still work in scripts and layouts, but are not listed in the GUI.
+**Older names.** `"Linear Agent"` (= Abstract, `"FO-0"`), `"Second-Order Agent"` (= Abstract, `"SO"`), `"Default Agent"` and `"Energy Agent"` (= Physical) still work in scripts and layouts, but are not listed in the GUI.
 
 **Policies and agent types.** Each policy states what it assumes of the agents' motion: `agentAssumption` on the policy, or `ComponentRegistry.assumptions` for policies that do not declare it.
 - `"any"`: no timing assumption.
 - `"plans transit"`: hands each transit's time (and profile) to the agent, no shorter than the agent's `shortestTransit(path)` (0 for an Abstract Agent).
-- `"constant speed"`: transit = path length / `maxSpeed`, not handed over.
+- `"FO-0"`: transit = path length / `maxSpeed` (constant speed), not handed over.
 
 `ScenarioModel.checkAgentFit` turns this into a note in the GUI status line and a warning in `runTrial`.
 - ✓ = works as designed.
@@ -183,9 +197,9 @@ New agent types are subclasses for different platforms (dynamics, limits, sensin
 |---|---|---|---|
 | Random Walk | ✓ | ✓ | No timing assumptions; dwell from the current `R` at arrival. Each agent moves at its own pace (a Physical Agent: `shortestTransit`) |
 | Battery-Aware ED-RHC | ✓ | ✓ | As ED-RHC; predicts each plan's battery energy with the agent's own `transitEnergy` |
-| ED-RHC | ✓ | ✓ | Hands the agent its planned transit: `y/maxSpeed`, or the agent's `shortestTransit` if longer (a Physical Agent's own pace). `"constant"` is the Automatica model; `"SO"` runs it with the SO shape (the JS SO#) |
-| ED-ORHC-SO / -FO | ✓ | ✓ | Hands over the optimal transit time (no shorter than the agent's `shortestTransit`), profile and limits. A Physical Agent keeps the time; its profile is the planned one where that fits its limits, so its energy can differ from the plan's |
-| Classical RHC [1], Divergent RHC, Joint RHC, Joint RHC N | ✓ with `"constant"`; ≈ with `"SO"`/`"FO"` (1.5× slower than planned) | ≈ | Plan transits as path length / `maxSpeed`, which a Physical Agent cannot keep (it takes its `shortestTransit`). Joint RHC needs exactly 2 agents |
+| ED-RHC | ✓ | ✓ | Hands the agent its planned transit: `y/maxSpeed`, or the agent's `shortestTransit` if longer (a Physical Agent's own pace). `"FO-0"` is the Automatica model; `"SO"` runs it with the SO shape (the JS SO#) |
+| ED-ORHC-SO / -FO-3 | ✓ | ✓ | Hands over the optimal transit time (no shorter than the agent's `shortestTransit`), profile and limits. A Physical Agent keeps the time; its profile is the planned one where that fits its limits, so its energy can differ from the plan's |
+| Classical RHC [1], Divergent RHC, Joint RHC, Joint RHC N | ✓ with `"FO-0"`; ≈ with `"SO"`/`"FO-3"` (1.5× slower than planned) | ≈ | Plan transits as path length / `maxSpeed`, which a Physical Agent cannot keep (it takes its `shortestTransit`). Joint RHC needs exactly 2 agents |
 
 ## Random Walk
 
@@ -209,13 +223,13 @@ Agents may share targets. During a spike that the agents present cannot overcome
   - `alpha = 0.5` gives the paper's unweighted RHC method (Sec. III).
   - Set it with `'Policy_alpha'` in `runTrial`.
 - **Solver.** The RHCPs are solved numerically (grid search plus `fmincon` on each smooth case) instead of with the paper's closed forms.
-- **Agents.** The method assumes first-order agents moving at constant speed: use the **Abstract Agent** with the `"constant"` profile (the default), whose transit times equal path length / speed. See the compatibility table under [Agent types](#agent-types) for the others.
+- **Agents.** The method assumes first-order agents moving at constant speed: use the **Abstract Agent** with the `"FO-0"` profile (the default), whose transit times equal path length / speed. See the compatibility table under [Agent types](#agent-types) for the others.
 
 `Experiments/validation/validateEDRHC` compares `alpha = 0.5` and the nominal alpha with the legacy JavaScript simulator on its presets (`Configurations/Legacy/`).
 
-### Energy-aware ED-RHC (ED-ORHC-SO, ED-ORHC-FO)
+### Energy-aware ED-RHC (ED-ORHC-SO, ED-ORHC-FO-3)
 
-`ED-ORHC-SO` and `ED-ORHC-FO` (`EDRHCPolicy` with `transit = "SO"` or `"FO"`) implement the energy-aware variant of S. Welikala and C. G. Cassandras, "Event-driven receding horizon control of energy-aware dynamic agents for distributed persistent monitoring", arXiv 2102.12963 (IEEE CDC 2021). Use them with the **Abstract Agent**; the policy hands each transit's profile, time and limits to the agent, whatever its own profile.
+`ED-ORHC-SO` and `ED-ORHC-FO-3` (`EDRHCPolicy` with `transit = "SO"` or `"FO-3"`; the older name `ED-ORHC-FO` still works) implement the energy-aware variant of S. Welikala and C. G. Cassandras, "Event-driven receding horizon control of energy-aware dynamic agents for distributed persistent monitoring", arXiv 2102.12963 (IEEE CDC 2021). Use them with the **Abstract Agent**; the policy hands each transit's profile, time and limits to the agent, whatever its own profile.
 
 - **Objective.** `J_T = energyWeight * J_e + J_s`. Here `J_e` is the integral of the squared tangential acceleration `u(t)^2` over all agents, and `J_s` is the usual sensing objective.
   - The default `energyWeight = 7.68e-3` is the paper's `213.3e-6` (for a 600 x 600 space) rescaled to the 100 x 100 canvas. Energy grows with length squared, so the factor is 36.
@@ -227,17 +241,17 @@ Agents may share targets. During a spike that the agents present cannot overcome
     - Under a speed limit, `u` falls linearly to 0 as the speed reaches the limit, then the agent cruises.
     - Under an acceleration limit, `u` is held at the limit, then falls linearly (the paper's SO-A).
     - Under both, it accelerates at the limit, ramps `u` down to 0 as it reaches the speed limit, cruises, and mirrors this at the end.
-  - **FO** (trapezoids, the paper's FO-3). Without limits, the trapezoid accelerates for `rho/3`, cruises at `3y/(2 rho)`, brakes for `rho/3`, and has `E = 27 y^2/(2 rho^3)` (Theorem 5). With limits, the cruise speed is clamped to what they allow (the paper's FO-V and FO-A).
+  - **FO-3** (trapezoids). Without limits, the trapezoid accelerates for `rho/3`, cruises at `3y/(2 rho)`, brakes for `rho/3`, and has `E = 27 y^2/(2 rho^3)` (Theorem 5). With limits, the cruise speed is clamped to what they allow (the paper's FO-V and FO-A).
   - The RHCP never plans a transit shorter than the limits allow: `y/v + v/u`, or `2 sqrt(y/u)` on short edges.
   - These profiles generalize the paper's Apps. D-E to both limits at once. The speed-limited SO keeps `u` continuous, which uses 2-6% less energy than the paper's SO-V profile.
 - **Agents.** The Abstract Agent follows each planned transit exactly and accumulates `J_e` exactly. Under `ED-RHC` it runs each fixed transit `y/maxSpeed` with its own profile (`"SO"`: the JS simulator's SO#). The Physical Agent tracks the same plans with feedback.
 - **The energy each agent draws.** The RHCP's `E(rho)` comes from the agent (`Agent.transitEnergyModel`):
   - For the Abstract Agent it is the closed form above (results unchanged).
-  - For the Physical Agent it is the `int |a|^2 dt` of the reference that agent will follow. That reference is the fastest profile retimed to `rho`, or, where the planned SO/FO profile fits the agent's limits on the path, whichever of the two draws less. The energy includes the turns' `v^2 kappa` on curved paths, and `E(rho)` falls with `rho` (monotone), so the RHCP's search meets no jump.
+  - For the Physical Agent it is the `int |a|^2 dt` of the reference that agent will follow. That reference is the fastest profile retimed to `rho`, or, where the planned SO/FO-3 profile fits the agent's limits on the path, whichever of the two draws less. The energy includes the turns' `v^2 kappa` on curved paths, and `E(rho)` falls with `rho` (monotone), so the RHCP's search meets no jump.
   - The model is tabulated on a few transit times per edge, interpolated in log-log coordinates, and cached by the policy.
   - On a curved edge of the lab (8-2), the closed form misses the drawn energy by about 85%, while the agent's model is within 0.2% (0.4% on a nearly straight edge).
-  - Over 500 s on the lab (5 Physical Agents), planned and drawn `J_e` agree within 1% (closed form: 18% mean error for SO, 13% for FO).
-  - The RHCPs now see what turns cost. Compared with the closed form, the energy drawn falls by 30% (SO) and 25% (FO), `J` rises by 5.0% and 2.9%, and `runTrial`'s `J_T` falls by 28% and 23%.
+  - Over 500 s on the lab (5 Physical Agents), planned and drawn `J_e` agree within 1% (closed form: 18% mean error for SO, 13% for FO-3).
+  - The RHCPs now see what turns cost. Compared with the closed form, the energy drawn falls by 30% (SO) and 25% (FO-3), `J` rises by 5.0% and 2.9%, and `runTrial`'s `J_T` falls by 28% and 23%.
 - **Metrics.** `runTrial` also returns `out.Je`, `out.JT`, `out.vmax` and `out.umax` (paper eqs. 3 and 73), and `out.log.Je` holds the per-step energy.
 - **`clearFirst`** (default `false`, which follows the paper). Set it to `true` for the JS simulator's energy-aware convention: every visit clears the target, there is no RHCP1 on arrival, and plans only include visits that clear `j`.
 

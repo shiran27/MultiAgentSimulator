@@ -3,7 +3,7 @@ classdef SpeedProfile
     % agent types (AbstractAgent follows them exactly, PhysicalAgent tracks them)
     % and by the energy-aware RHC policies. A profile family may be bounded by a speed limit vb
     % and an acceleration limit ub (Inf = no limit):
-    %   "constant"  constant speed y/rho (a first-order agent; the jumps at both ends are
+    %   "FO-0"      constant speed y/rho (a first-order agent; the jumps at both ends are
     %               impulses, so the energy int u^2 dt is undefined)
     %   "SO"        the minimum-energy profile (min int u^2 dt). Without limits v(t) =
     %               6y t (rho - t)/rho^3, E = 12 y^2/rho^3 (Welikala and Cassandras, arXiv
@@ -13,15 +13,17 @@ classdef SpeedProfile
     %                         continuous, unlike the paper's SO-V, which uses more energy)
     %                 accel:  u = ub, then linear from ub to -ub, then -ub (the paper's SO-A)
     %                 both:   u = ub, then linear down to 0 as v reaches vb, cruise, mirror image
-    %   "FO"        the minimum-energy trapezoid (accelerate, cruise, brake; the paper's FO-3).
+    %   "FO-3"      the minimum-energy trapezoid (accelerate, cruise, brake).
     %               Without limits the cruise speed is 3y/(2 rho), E = 27 y^2/(2 rho^3)
     %               (Theorem 5); with limits it is clamped to what they allow (App. E)
+    % The names follow the paper (FO-n: approximately first-order agents, n = 0..3; FO-1 and
+    % FO-2 are not implemented). The older names "constant" and "FO" still work (canonical).
     % Limits make transits shorter than minTransit infeasible.
     % A profile can also be a table (kind "table", from SpeedProfile.table): speeds at given
     % distances, with constant acceleration in between. PhysicalAgent uses one for its paths,
     % whose corners limit the speed.
     properties (Constant)
-        names = ["constant", "SO", "FO"]
+        names = ["FO-0", "SO", "FO-3"]
     end
 
     methods (Static)
@@ -29,12 +31,13 @@ classdef SpeedProfile
             % The profile <name> on an edge of length y crossed in time rho (at least
             % minTransit). P.kind: "cubic" (unconstrained SO), "sat" (SO with u at its limit, no
             % cruise), or "arc": accelerate at a for s, ramp u from a to 0 over d, cruise at v
-            % (constant: s = d = 0; SO with the speed limit reached; FO trapezoids: d = 0)
+            % (FO-0: s = d = 0; SO with the speed limit reached; FO-3 trapezoids: d = 0)
             if nargin < 4, vb = Inf; end
             if nargin < 5, ub = Inf; end
+            name = SpeedProfile.canonical(name);
             P = struct('name', name, 'y', y, 'rho', rho, 'kind', "arc", 'a', 0, 's', 0, 'd', 0, 'v', 0);
             switch name
-                case "constant"
+                case "FO-0"
                     P.v = y / rho;
                 case "SO"
                     [~, regime, p] = SpeedProfile.soEnergy(y, rho, vb, ub);
@@ -44,8 +47,8 @@ classdef SpeedProfile
                         case "V",    P.a = 2 * vb / p; P.d = p; P.v = vb;
                         case "VA",   P.a = ub; P.d = p; P.s = vb / ub - p / 2; P.v = vb;
                     end
-                case "FO"
-                    [~, vc] = SpeedProfile.foEnergy(y, rho, vb, ub);
+                case "FO-3"
+                    [~, vc] = SpeedProfile.fo3Energy(y, rho, vb, ub);
                     P.v = vc; P.a = vc^2 / (vc * rho - y); P.s = vc / P.a;
                 otherwise
                     error('SpeedProfile:Name', 'Unknown speed profile "%s" (use %s)', name, ...
@@ -102,13 +105,13 @@ classdef SpeedProfile
 
         function E = energy(name, y, rho, vb, ub)
             % Energy int u^2 dt over the whole edge, for each transit time in rho (vectorized);
-            % NaN for "constant" (undefined)
+            % NaN for FO-0 (undefined)
             if nargin < 4, vb = Inf; end
             if nargin < 5, ub = Inf; end
-            switch name
+            switch SpeedProfile.canonical(name)
                 case "SO",       E = SpeedProfile.soEnergy(y, rho, vb, ub);
-                case "FO",       E = SpeedProfile.foEnergy(y, rho, vb, ub);
-                case "constant", E = nan(size(rho));
+                case "FO-3",     E = SpeedProfile.fo3Energy(y, rho, vb, ub);
+                case "FO-0",     E = nan(size(rho));
                 otherwise,       error('SpeedProfile:Name', 'Unknown speed profile "%s"', name);
             end
         end
@@ -130,8 +133,16 @@ classdef SpeedProfile
 
         function rho = defaultTransit(name, y, vmax)
             % Transit time when no policy plans one: the shortest whose peak speed is vmax
-            % (constant: y/vmax; SO and FO peak at 3y/(2 rho): 1.5 y/vmax)
-            if name == "constant", rho = y / vmax; else, rho = 1.5 * y / vmax; end
+            % (FO-0: y/vmax; SO and FO-3 peak at 3y/(2 rho): 1.5 y/vmax)
+            if SpeedProfile.canonical(name) == "FO-0", rho = y / vmax; else, rho = 1.5 * y / vmax; end
+        end
+
+        function name = canonical(name)
+            % The current name of a speed profile: the older names "constant" (also "constant
+            % speed") and "FO" are FO-0 and FO-3 (renamed on 2026-10-22)
+            name = string(name);
+            name(lower(name) == "constant" | lower(name) == "constant speed") = "FO-0";
+            name(name == "FO") = "FO-3";
         end
     end
 
@@ -164,7 +175,7 @@ classdef SpeedProfile
             end
         end
 
-        function [E, vc] = foEnergy(y, rho, vb, ub)
+        function [E, vc] = fo3Energy(y, rho, vb, ub)
             % Minimum energy of a trapezoid: the energy 2 vc^3/(vc rho - y) falls with the cruise
             % speed vc up to 3y/(2 rho), so vc is that value clamped to the limits: at most vb,
             % and at least the vc whose acceleration vc^2/(vc rho - y) is ub

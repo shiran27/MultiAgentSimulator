@@ -200,6 +200,30 @@ classdef guiTest < matlab.uitest.TestCase
             snap(tc, 'station_added');
         end
 
+        function paperProfileFiltersMenus(tc)
+            % A paper profile shows only what its paper uses; the model follows the shown
+            % selections; a layout may still use a hidden option; Full shows everything again
+            tc.verifyEqual(tc.ui.paperProfileDropdown.Value, 'Full');
+            tc.choose(tc.ui.paperProfileDropdown, 'Energy paper');
+            tc.verifyEqual(sort(string(tc.ui.policyDropdown.Items)), ...
+                sort(["ED-ORHC-SO", "ED-ORHC-FO-3", "Battery-Aware ED-RHC"]));
+            tc.verifyEqual(string(tc.ui.profileDropdown.ItemsData), ["SO", "FO-3"]);
+            tc.verifyEqual(tc.ui.model.activePolicy, tc.ui.policyDropdown.Value, 'model follows the shown policy');
+            tc.verifyEqual(tc.ui.model.agentSpec.profile, string(tc.ui.profileDropdown.Value), ...
+                'new agents take the shown speed profile');
+            snap(tc, 'paper_profile_energy');
+            tc.ui.loadLayout(fullfile(tc.root, 'Configurations', 'ReportLayout.mat'));
+            tc.verifyEqual(string(tc.ui.profileDropdown.Value), tc.ui.model.agents(1).profile, ...
+                'a loaded layout shows its agents'' profile even if the paper profile hides it');
+            tc.choose(tc.ui.paperProfileDropdown, 'Collaboration paper');
+            tc.verifyTrue(all(startsWith(string(tc.ui.scenarioDropdown.Items(2:end)), "JS: ")), 'JS presets only');
+            tc.choose(tc.ui.scenarioDropdown, 'JS: 3 agents, general');
+            tc.verifyEqual(numel(tc.ui.model.agents), 3);
+            tc.choose(tc.ui.paperProfileDropdown, 'Full');
+            tc.verifyEqual(numel(tc.ui.policyDropdown.Items), numel(tc.ui.registry.keysFor('policy')));
+            tc.verifyEqual(numel(tc.ui.scenarioDropdown.Items), height(scenarioCatalog()) + 1);
+        end
+
         function addsTargetsOverBackgroundImage(tc)
             tc.ui.renderer.loadBackgroundImage(fullfile(tc.root, 'LabLayout.png'));
             tc.press(button(tc, 'Add Target'));
