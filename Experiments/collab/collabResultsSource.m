@@ -54,8 +54,8 @@ showImages(fullfile(outDir, ["fig_class_avoided", "fig_class_visited", "fig_clas
 
 %% Simulations
 % Benchmark (8 configurations x 4 methods and 3 ablations), group study (2 configurations x 4
-% methods), team size (N = 2..6, 3 methods) and maps (5 maps x 4 methods). Each run is saved
-% in |runs/<id>.mat|.
+% methods), team size (N = 2..6, 3 methods) and maps (5 maps x 4 methods, and Collab (B)
+% without the terminal correction). Each run is saved in |runs/<id>.mat|.
 runs = collabExperiments("list", Quick=QuickMode);
 fprintf('%d runs\n', height(runs));
 collabExperiments("run", Quick=QuickMode, ResultsDir=outDir);
