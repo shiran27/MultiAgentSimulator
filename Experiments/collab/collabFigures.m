@@ -9,7 +9,8 @@ function collabFigures(outDir)
 %       agents' start targets and the targets with A_i = 12 of the group study
 %       (Configurations/Collab/Collab_*_Group.mat)
 %   fig_setups_team.pdf    the team-size layouts (Configurations/Collab/Collab_General_N2..N6.mat)
-% Each figure is also saved as a 300-dpi PNG.
+%   fig_maps.pdf           the simulator's maps of the map study (collabMaps), as the GUI draws them
+% Layouts are drawn as in the GUI (y up). Each figure is also saved as a 300-dpi PNG.
 arguments
     outDir (1,:) char = fullfile(fileparts(fileparts(fileparts(mfilename('fullpath')))), 'results', 'collab')
 end
@@ -27,6 +28,7 @@ end
 neighborhoodFigure(outDir);
 setupFigure(outDir);
 teamFigure(outDir);
+mapsFigure(outDir);
 end
 
 function saveFig(f, base)
@@ -288,9 +290,9 @@ for k = 1:numel(presets)
     end
     for a = s.agentStarts(:)'
         p = s.targets(a, :);
-        patch(p(1) + 3.2 * [-1 1 0], p(2) - 5.5 + 3.2 * [0.8 0.8 -1], [0.85 0.1 0.1], 'EdgeColor', 'k', 'LineWidth', 0.4);
+        startMarker(p, 3.2, 5.5);
     end
-    set(ax, 'YDir', 'reverse', 'XTick', [], 'YTick', [], 'XLim', [0 100], 'YLim', [0 100]);
+    set(ax, 'YDir', 'normal', 'XTick', [], 'YTick', [], 'XLim', [0 100], 'YLim', [0 100]);
     title(names(k), 'Interpreter', 'latex', 'FontWeight', 'normal', 'FontSize', 8);
 end
 saveFig(f, fullfile(outDir, "fig_setups"));
@@ -315,10 +317,54 @@ for n = 2:6
     end
     for a = s.agentStarts(:)'
         p = s.targets(a, :);
-        patch(p(1) + 3.2 * [-1 1 0], p(2) - 5.5 + 3.2 * [0.8 0.8 -1], [0.85 0.1 0.1], 'EdgeColor', 'k', 'LineWidth', 0.4);
+        startMarker(p, 3.2, 5.5);
     end
-    set(ax, 'YDir', 'reverse', 'XTick', [], 'YTick', [], 'XLim', [0 100], 'YLim', [0 100]);
+    set(ax, 'YDir', 'normal', 'XTick', [], 'YTick', [], 'XLim', [0 100], 'YLim', [0 100]);
     title(sprintf('$N = %d$', n), 'Interpreter', 'latex', 'FontWeight', 'normal', 'FontSize', 8);
 end
 saveFig(f, fullfile(outDir, "fig_setups_team"));
+end
+
+% ------------------------------------------------------------------------------------------
+function mapsFigure(outDir)
+% The maps of the map study (collabMaps) as the GUI draws them: background image, walls, the
+% trajectory segments along the planned paths (Dijkstra Corners), targets and the agents' start
+% targets
+root = fileparts(which('MainUI'));
+M = collabMaps();
+f = figure('Visible', 'off', 'Units', 'inches', 'Position', [0 0 7.16 4.9]);
+tiledlayout(2, 6, 'TileSpacing', 'compact', 'Padding', 'compact');
+tiles = [1 3 5 8 10];   % three maps in the first row, two centered in the second
+for k = 1:height(M)
+    tmp = load(fullfile(root, 'Configurations', M.Layout(k) + ".mat"), 's'); s = tmp.s;
+    model = ScenarioModel(DijkstraCornerPlanner());
+    model.importLayout(s);
+    ax = nexttile(tiles(k), [1 2]); hold on; axis equal; box on;
+    img = flipud(imread(fullfile(root, 'Configurations', 'backgrounds', s.background)));
+    image(ax, [0 100], [0 100], img, 'AlphaData', 0.85);
+    for w = 1:size(s.walls, 1)
+        plot(s.walls(w, [1 3]), s.walls(w, [2 4]), '-', 'Color', [0.2 0.2 0.2], 'LineWidth', 1);
+    end
+    for e = 1:numel(model.edges)
+        c = model.edges(e).curvePoints;
+        plot(c(:, 1), c(:, 2), '-', 'Color', [0.1 0.1 0.1], 'LineWidth', 0.6);
+    end
+    for q = 1:size(s.targets, 1)
+        plot(s.targets(q, 1), s.targets(q, 2), 'o', 'MarkerSize', 7, 'MarkerFaceColor', [0.75 0.85 1.0], 'MarkerEdgeColor', [0.1 0.2 0.5]);
+        text(s.targets(q, 1), s.targets(q, 2), sprintf('%d', q), 'FontSize', 4.5, 'HorizontalAlignment', 'center', ...
+            'VerticalAlignment', 'middle', 'Interpreter', 'latex');
+    end
+    for a = s.agentStarts(:)'
+        startMarker(s.targets(a, :), 2.4, 4.4);
+    end
+    set(ax, 'YDir', 'normal', 'XTick', [], 'YTick', [], 'XLim', [0 100], 'YLim', [0 100]);
+    title(sprintf('%s ($M = %d$, $N = %d$)', M.Name(k), size(s.targets, 1), numel(s.agentStarts)), ...
+        'Interpreter', 'latex', 'FontWeight', 'normal', 'FontSize', 8);
+end
+saveFig(f, fullfile(outDir, "fig_maps"));
+end
+
+function startMarker(p, r, gap)
+% an agent's start: a red triangle above its target (y up)
+patch(p(1) + r * [-1 1 0], p(2) + gap + r * [-0.8 -0.8 1], [0.85 0.1 0.1], 'EdgeColor', 'k', 'LineWidth', 0.4);
 end

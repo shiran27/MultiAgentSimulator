@@ -2,25 +2,27 @@
 % This live script regenerates every figure and result of the collaboration paper (W. Getts
 % and S. Welikala, "Collaborative event-driven receding horizon control for persistent
 % monitoring in network systems", |Paper_ActiveCollaboration/main.tex|): the illustrative
-% figures of Secs. III and VI, the benchmark configurations, and Tables II-V and the plots of
-% Sec. VIII. Run all sections (Live Editor: *Run All*). To get the same report without the Live
+% figures of Secs. III and VI, the benchmark configurations and maps, and the tables and plots
+% of Sec. VIII. Run all sections (Live Editor: *Run All*). To get the same report without the Live
 % Editor, run from the repository root:
 %
 %   matlab -batch "addpath(genpath(pwd)); exportCollabResults"
 %
 % The controller is |Collab-ED-RHC| (|Components/AgentPolicy/CollabEDRHCPolicy.m|), compared
 % with |ED-RHC| (alpha = 0.5) and |ED-RHC-alpha| (nominal alpha). Every setup is a layout file
-% that the GUI also lists (Scenario dropdown): the JS presets in |Configurations/Legacy/| and
-% the collaboration setups in |Configurations/Collab/|. Results go to |results/collab/|; when
+% that the GUI also lists (Scenario dropdown): the JS presets in |Configurations/Legacy/|, the
+% collaboration setups in |Configurations/Collab/|, and the simulator's maps (Lab floor, Office
+% floor, City patrol, Harbor patrol, Campus) in |Configurations/|. Results go to |results/collab/|; when
 % the paper's folder sits next to this repository (|../Paper_ActiveCollaboration|), its
 % |Figures/Collab/| and |generated/| folders receive the figures and tables. Simulations already
 % saved in |results/collab/runs/| are not run again (delete them to rerun). This file is built
 % from |Experiments/collab/collabResultsSource.m| by |buildCollabResults|.
 
 %% Settings
-% |QuickMode| shortens every run to 60 s and keeps two configurations, to check the pipeline in
-% a few minutes. A full run took about 30 minutes on a 10-core computer with one parallel worker
-% per core (Parallel Computing Toolbox, used when available), and it takes longer on one core.
+% |QuickMode| shortens every run to 60 s and keeps two configurations and one map, to check the
+% pipeline in a few minutes. A full run took about 45 minutes on a 10-core computer with one
+% parallel worker per core (Parallel Computing Toolbox, used when available), and it takes
+% longer on one core.
 % Every run is deterministic, so serial and parallel runs give the same results.
 QuickMode = false;
 quick = getenv("COLLAB_RESULTS_QUICK");   % set by exportCollabResults(Quick=true)
@@ -45,19 +47,20 @@ layouts = makeCollabLayouts()
 % abandoned by three agents, and a target traded from two leaving to two arriving agents.
 % Fig. 5: agent neighborhoods and cost sets under ED-RHC and Collab-ED-RHC.
 % Figs. 6-7: the benchmark configurations with the targets of the group study, and the
-% team-size layouts.
+% team-size layouts. The maps of the map study, drawn as in the GUI (background, walls, paths).
 collabFigures(outDir);
 showImages(fullfile(outDir, ["fig_class_avoided", "fig_class_visited", "fig_class_abandoned", ...
-    "fig_class_traded", "fig_neighborhoods", "fig_setups", "fig_setups_team"] + ".png"));
+    "fig_class_traded", "fig_neighborhoods", "fig_setups", "fig_setups_team", "fig_maps"] + ".png"));
 
 %% Simulations
 % Benchmark (8 configurations x 4 methods and 3 ablations), group study (2 configurations x 4
-% methods) and team size (N = 2..6, 3 methods). Each run is saved in |runs/<id>.mat|.
+% methods), team size (N = 2..6, 3 methods) and maps (5 maps x 4 methods). Each run is saved
+% in |runs/<id>.mat|.
 runs = collabExperiments("list", Quick=QuickMode);
 fprintf('%d runs\n', height(runs));
 collabExperiments("run", Quick=QuickMode, ResultsDir=outDir);
 
-%% Tables II-V, Figs. 8-9 and the numbers quoted in Sec. VIII
+%% Tables, plots and the numbers quoted in Sec. VIII
 % J_T of every run, the LaTeX tables of Sec. VIII, the J(t) and R_i(t) plots, and
 % |collab_macros.tex|, which defines every number the text quotes (full mode only).
 T = collabExperiments("collect", Quick=QuickMode, ResultsDir=outDir);
