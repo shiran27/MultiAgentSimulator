@@ -16,7 +16,7 @@ function out = collabExperiments(mode, opts)
 %   collabExperiments("collect")   runs.csv, the LaTeX tables, the numbers quoted in the paper
 %                                  (collab_macros.tex) and the plots
 % Quick = true: 60 s runs on two configurations and one map (pipeline check). Settings of every
-% run: first-order agents (Linear Agent) at the layout's speed, A_i = 1, B_i = 10 and R_i(0) of
+% run: Abstract Agents with the FO-0 profile at the layout's speed, A_i = 1, B_i = 10 and R_i(0) of
 % the layout (0.5 in the JS presets) unless the layout says otherwise (group study and maps:
 % TargetRates = "layout"), T = 500 s, dt = 0.02 s, H = 250, service only at the target.
 arguments
@@ -137,7 +137,7 @@ end
 function p = params(layout, extra, T, opts)
 s = load(fullfile(fileparts(which('MainUI')), 'Configurations', layout), 's');
 p = struct('Layout', layout, 'AgentStarts', "layout", ...
-    'Planner', "Dijkstra Corners", 'AgentType', "Linear Agent", ...
+    'Planner', "Dijkstra Corners", 'AgentType', "Abstract Agent", 'Agent_profile', "FO-0", ...
     'UncertaintyMode', "Static Uniform", 'A_base', 1, 'B', 10, 'EndTime', T, ...
     'Dt', opts.Dt, 'DetectionRadius', 1e-6, 'Policy_H', 250, 'AgentSpeed', s.s.agentSpeed(1), ...
     'Log', true);

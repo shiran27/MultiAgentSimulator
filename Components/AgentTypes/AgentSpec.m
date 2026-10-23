@@ -13,7 +13,7 @@ classdef AgentSpec
         type string = "Abstract Agent"   % registered agent type (older aliases also work)
         maxSpeed double = 15             % top speed (and nominal transit speed)
         maxAccel double = 15             % largest |acceleration|
-        profile string = ""              % speed profile: "constant", "SO", "FO" ("" = type default)
+        profile string = ""              % speed profile: "FO-0", "SO", "FO-3" ("" = type default)
         kp double = NaN                  % PhysicalAgent tracking gains (NaN = TrackingController defaults)
         kd double = NaN
         batteryWh double = NaN           % battery capacity [Wh] (NaN = Battery default)

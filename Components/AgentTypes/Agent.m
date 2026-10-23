@@ -6,13 +6,13 @@ classdef (Abstract) Agent < handle & matlab.mixin.Heterogeneous
     %
     % What every agent has:
     %   - kinematic state and limits (KinematicState: pos, vel, acc, maxSpeed, maxAccel)
-    %   - a speed profile for its transits (SpeedProfile: "constant", "SO" or "FO"). A policy
+    %   - a speed profile for its transits (SpeedProfile: "FO-0", "SO" or "FO-3"). A policy
     %     that plans a transit may hand the agent its transit time, profile and speed /
     %     acceleration limits before it leaves a target (as RHC policies set dwellRemaining);
     %     otherwise the agent uses its own profile with peak speed maxSpeed. A policy plans
     %     transit times of at least shortestTransit(path), which the agent can keep; legTime is
     %     the planned duration of the transit in progress (or the last one)
-    %   - energy metrics: Je = int |u|^2 dt (NaN once a "constant" transit is used: its
+    %   - energy metrics: Je = int |u|^2 dt (NaN once an FO-0 transit is used: its
     %     impulsive accelerations make it undefined), peak speed and acceleration
     %   - a battery (Battery: capacity and power model), reported as SOC (about an hour of
     %     operation on the default 26 Wh); with stopWhenEmpty = true the agent stops when it is
@@ -29,7 +29,7 @@ classdef (Abstract) Agent < handle & matlab.mixin.Heterogeneous
         initialPosition
         initialTargetIdx
 
-        profile string = "constant" % speed profile of its transits: "constant", "SO" or "FO"
+        profile string = "FO-0"     % speed profile of its transits: "FO-0", "SO" or "FO-3"
         transitTime = NaN           % planned transit time of the next edge (NaN: from maxSpeed)
         transitProfile string = ""  % profile of the next edge ("" = profile)
         transitLimits = [Inf Inf]   % [speed, acceleration] limits of the next edge's profile
@@ -96,6 +96,7 @@ classdef (Abstract) Agent < handle & matlab.mixin.Heterogeneous
         function p = get.battery_percentage(obj), p = obj.battery.percentage; end
 
         function set.profile(obj, p)
+            p = SpeedProfile.canonical(p);   % older names ("constant", "FO") still work
             assert(any(p == SpeedProfile.names), 'Agent:Profile', ...
                 'Unknown speed profile "%s" (use %s)', p, strjoin(SpeedProfile.names, ", "));
             obj.profile = p;
@@ -144,7 +145,7 @@ classdef (Abstract) Agent < handle & matlab.mixin.Heterogeneous
 
         function Ja = accelEnergy(obj, pts, rho, name, vb, ub)
             % int |a|^2 dt of a transit along pts taking rho with profile name (default: the
-            % agent's own) and limits vb, ub (default none); 0 for "constant", whose jumps in
+            % agent's own) and limits vb, ub (default none); 0 for FO-0, whose jumps in
             % speed draw no modeled power
             if nargin < 4, name = obj.profile; end
             if nargin < 6, vb = Inf; ub = Inf; end

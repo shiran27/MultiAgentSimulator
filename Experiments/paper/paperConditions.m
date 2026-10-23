@@ -3,7 +3,7 @@ function cond = paperConditions(name)
 % condition overrides paperDefaults (reference lab scenario, ED-RHC, Dijkstra Corners, Physical
 % Agent, T = 500 s) with Params, and runs once per seed in Seeds (Random Walk is the only
 % stochastic policy, so the others run once):
-%   "policies"  Table IV, Fig. 9: Random Walk, ED-RHC, ED-ORHC-SO and ED-ORHC-FO, each with
+%   "policies"  Table IV, Fig. 9: Random Walk, ED-RHC, ED-ORHC-SO and ED-ORHC-FO-3, each with
 %               Abstract and Physical Agents
 %   "planners"  Table V, Fig. 10: Dijkstra Corners, Energy Efficient and Grid A* (ED-RHC,
 %               Physical Agents)
@@ -18,7 +18,7 @@ end
 rwSeeds = 1:10;
 switch name
     case "policies"
-        pols = ["Random Walk", "ED-RHC", "ED-ORHC-SO", "ED-ORHC-FO"];
+        pols = ["Random Walk", "ED-RHC", "ED-ORHC-SO", "ED-ORHC-FO-3"];
         types = ["Abstract Agent", "Physical Agent"];
         labels = strings(0); params = {}; seeds = {};
         for t = types

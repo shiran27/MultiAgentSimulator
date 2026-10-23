@@ -123,14 +123,14 @@ classdef ScenarioModel < handle
             name = string(obj.activePolicy);
             assumption = obj.registry.assumptionOf(name, obj.policy);
             physical = arrayfun(@(a) isa(a, 'PhysicalAgent'), obj.agents);
-            shaped = arrayfun(@(a) ~isa(a, 'PhysicalAgent') && a.profile ~= "constant", obj.agents);
+            shaped = arrayfun(@(a) ~isa(a, 'PhysicalAgent') && a.profile ~= "FO-0", obj.agents);
             switch assumption
-                case "constant speed"
+                case "FO-0"
                     if any(shaped)
-                        msg = name + " plans transits as path length / speed; agents with SO or FO profiles take 1.5x longer than planned.";
+                        msg = name + " plans transits as path length / speed; agents with SO or FO-3 profiles take 1.5x longer than planned.";
                     end
                     if any(physical)
-                        msg = strtrim(msg + " " + name + " assumes constant-speed agents; physical agents lag behind its plans.");
+                        msg = strtrim(msg + " " + name + " assumes FO-0 (constant-speed) agents; physical agents lag behind its plans.");
                     end
                 case "plans transit"
                     if any(physical)
@@ -154,7 +154,7 @@ classdef ScenarioModel < handle
 
         function setActivePolicy(obj, policyName)
             if ischar(policyName) || isstring(policyName)
-                obj.activePolicy = char(policyName);
+                obj.activePolicy = char(obj.registry.resolve(policyName));   % older names still work
             end
         end
 

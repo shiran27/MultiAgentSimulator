@@ -14,7 +14,7 @@ classdef PhysicalAgent < Agent
     %     agent's own) when that profile keeps within the limits on this path; otherwise it is
     %     the fastest profile that does (full acceleration and braking, slower through corners,
     %     where the turn takes acceleration too), slowed down uniformly to the planned time.
-    %     With an energy-aware profile ("SO", "FO") the agent takes whichever of the two draws
+    %     With an energy-aware profile ("SO", "FO-3") the agent takes whichever of the two draws
     %     less int |a|^2 dt here: on a curvy path the planned shape, optimal on a straight
     %     line, can cost more in the turns than the retimed fastest profile
     % A plan shorter than shortestTransit(path), the fastest such profile, cannot be kept, so
@@ -28,7 +28,7 @@ classdef PhysicalAgent < Agent
     % arrivePosTol of the target and almost still; while dwelling it holds its position there.
     % The profile, maxSpeed, maxAccel and the gains (controller.kp, controller.kd) are set per
     % agent (GUI: Agent Speed / Agent Accel / Speed Profile; runTrial: AgentSpeed,
-    % Agent_profile, Agent_maxAccel, Agent_kp, Agent_kd). With profile "constant" (whose jumps
+    % Agent_profile, Agent_maxAccel, Agent_kp, Agent_kd). With profile "FO-0" (whose jumps
     % in speed no physical agent can follow) the agent moves at its own fastest pace. Je counts
     % the full commanded acceleration (|a|^2, steering included).
     properties
@@ -48,7 +48,7 @@ classdef PhysicalAgent < Agent
                 index
                 position
                 maxSpeed
-                opts.Profile string = "constant"
+                opts.Profile string = "FO-0"
             end
             obj@Agent(index, position, maxSpeed);
             obj.profile = opts.Profile;
@@ -90,7 +90,7 @@ classdef PhysicalAgent < Agent
             fast = obj.fastestProfile(G);
             lo = max([rhoRange(1), fast.rho, SpeedProfile.minTransit(y, vb, ub), eps]);
             hi = max(rhoRange(end), 1.01 * lo);
-            fits = @(r) name ~= "constant" && obj.keepsLimits(SpeedProfile.shape(name, y, r, vb, ub), G);
+            fits = @(r) SpeedProfile.canonical(name) ~= "FO-0" && obj.keepsLimits(SpeedProfile.shape(name, y, r, vb, ub), G);
             if fits(lo)
                 rs = lo;
             elseif ~fits(hi)
@@ -111,7 +111,7 @@ classdef PhysicalAgent < Agent
                 rP = unique(rs * (min(max(hi, rs), 8 * rs) / rs) .^ linspace(0, 1, 6));
                 EP = arrayfun(@(r) obj.referenceEnergy(G, SpeedProfile.shape(name, y, r, vb, ub)), rP);
             end
-            if ~any(name == ["SO", "FO"]), rP = []; EP = []; end   % not energy-aware: no choice
+            if ~any(SpeedProfile.canonical(name) == ["SO", "FO-3"]), rP = []; EP = []; end   % not energy-aware: no choice
             f = @(r) PhysicalAgent.tabulatedEnergy(r, rs, rF, EF, rP, EP);
         end
 
@@ -224,11 +224,11 @@ classdef PhysicalAgent < Agent
         function P = referenceProfile(obj, G, P)
             % The planned profile P if it keeps within the reference limits along G, else the
             % fastest profile that does, slowed down to P's time (if that is longer). For an
-            % energy-aware P ("SO", "FO"), the retimed fastest profile also when it draws less
+            % energy-aware P ("SO", "FO-3"), the retimed fastest profile also when it draws less
             fastest = obj.fastestProfile(G);
             if P.rho < fastest.rho || ~obj.keepsLimits(P, G)
                 P = SpeedProfile.retime(fastest, max(P.rho, fastest.rho));
-            elseif any(P.name == ["SO", "FO"])
+            elseif any(P.name == ["SO", "FO-3"])
                 Q = SpeedProfile.retime(fastest, P.rho);
                 if obj.referenceEnergy(G, Q) < obj.referenceEnergy(G, P), P = Q; end
             end
@@ -306,9 +306,9 @@ classdef PhysicalAgent < Agent
         end
 
         function ok = keepsLimits(obj, P, G)
-            % Does profile P keep within the reference limits along G? ("constant" never does:
-            % it jumps to its speed)
-            if P.name == "constant", ok = false; return; end
+            % Does profile P keep within the reference limits along G? (FO-0 never does: it
+            % jumps to its speed)
+            if P.name == "FO-0", ok = false; return; end
             vb = obj.planMargin * obj.state.maxSpeed;
             ub = obj.planMargin * obj.state.maxAccel;
             t = linspace(0, P.rho, 400);

@@ -14,7 +14,7 @@ classdef (Abstract) Policy < handle
     %   resetReservations()             called when the simulation is reset (clear the
     %                                   policy's memory of earlier runs)
     %   agentAssumption (Constant)      what the policy assumes of the agents' motion: "any",
-    %                                   "plans transit" or "constant speed"
+    %                                   "plans transit" or "FO-0" (constant speed)
     % Register a new policy in ComponentRegistry (policies) to list it in the GUI and runTrial.
     % Examples/EventDetection/SimplePolicy.m is a small example.
     methods (Abstract)

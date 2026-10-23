@@ -6,6 +6,7 @@ classdef MainUI < handle
         accelField          % max acceleration of agents added next
         profileDropdown     % speed profile of agents added next
         scenarioDropdown    % ready-made scenarios (scenarioCatalog)
+        paperProfileDropdown % paper profile: the components shown (paperProfiles)
         modeLabel
         statusLabel
         timeLabel
@@ -35,9 +36,11 @@ classdef MainUI < handle
     methods
         function obj = MainUI(opts)
             % MainUI('Monitor', k) opens the windows on monitor k (a row of
-            % get(groot, 'MonitorPositions')); by default they open on the primary monitor
+            % get(groot, 'MonitorPositions')); by default they open on the primary monitor.
+            % MainUI('PaperProfile', name) starts with a paper profile (paperProfiles)
             arguments
                 opts.Monitor double = []
+                opts.PaperProfile (1,1) string = "Full"
             end
             obj.registry = ComponentRegistry();
             [mainPos, objectivePos] = MainUI.windowPositions(opts.Monitor);
@@ -71,6 +74,34 @@ classdef MainUI < handle
             
             obj.renderer.renderAll(obj.model);
             obj.setTime(0, obj.clock.endTime);
+            if opts.PaperProfile ~= "Full", obj.setPaperProfile(opts.PaperProfile); end
+        end
+
+        function setPaperProfile(obj, name)
+            % Shows only what paper profile <name> lists (Configurations/paperProfiles) in the
+            % component, speed profile and scenario dropdowns; "Full" shows everything. A
+            % selection the profile hides moves to the first shown item, as if chosen by hand.
+            P = paperProfiles();
+            k = find([P.Name] == string(name), 1);
+            assert(~isempty(k), 'MainUI:PaperProfile', 'Unknown paper profile "%s"', name);
+            P = P(k);
+            obj.paperProfileDropdown.Value = char(P.Name);
+            menus = {'pathplanner', obj.plannerDropdown,    @obj.onPlannerChanged
+                     'policy',      obj.policyDropdown,     @obj.onPolicyChanged
+                     'agenttype',   obj.agentTypeDropdown,  @obj.onAgentTypeChanged
+                     'targettype',  obj.targetTypeDropdown, @obj.onTargetTypeChanged
+                     'metric',      obj.objectiveDropdown,  @obj.onObjectiveChanged};
+            for r = 1:size(menus, 1)
+                names = string(obj.registry.keysFor(menus{r, 1}));
+                MainUI.showOnly(menus{r, 2}, names, names, P.(menus{r, 1}), menus{r, 3});
+            end
+            MainUI.showOnly(obj.profileDropdown, MainUI.profileLabels, SpeedProfile.names, ...
+                P.speedprofile, @obj.onAgentProfileChanged);
+            cat = scenarioCatalog();
+            names = ["(build your own)"; cat.Name];
+            shown = MainUI.listed(names, P.scenario); shown(1) = true;
+            MainUI.showOnly(obj.scenarioDropdown, names, names, names(shown), @(~) []);
+            obj.setStatus("Paper profile: " + P.Name + " (" + P.Description + ")");
         end
 
         % File I/O behind the Save/Load Layout buttons, callable without the file dialogs
@@ -85,7 +116,7 @@ classdef MainUI < handle
             k = find(cat.Name == string(name), 1);
             assert(~isempty(k), 'MainUI:Scenario', 'Unknown scenario "%s"', name);
             obj.loadLayout(cat.File(k));
-            obj.scenarioDropdown.Value = char(name);
+            MainUI.showValue(obj.scenarioDropdown, name);
             obj.setStatus(cat.Name(k) + ": " + cat.Description(k));
             obj.noteAgentFit();
         end
@@ -94,7 +125,7 @@ classdef MainUI < handle
             tmp = load(file, 's');
             obj.model.importLayout(tmp.s);
             % The layout may carry its target type, uncertainty mode and agents; show them
-            obj.targetTypeDropdown.Value = char(obj.model.targetType);
+            MainUI.showValue(obj.targetTypeDropdown, obj.model.targetType);
             obj.uncertaintyDropdown.Value = obj.model.uncertaintyMode;
             if ~isempty(obj.model.agents)
                 a = obj.model.agents(1);
@@ -112,7 +143,24 @@ classdef MainUI < handle
         end
     end
 
+    properties (Constant)
+        profileLabels = ["FO-0 (constant)", "SO (smooth)", "FO-3 (trapezoid)"]   % of SpeedProfile.names
+    end
+
     methods (Static)
+        function tf = listed(names, patterns)
+            % Which names the patterns list (all when patterns is empty); a pattern ending in *
+            % matches every name that starts with the rest (paperProfiles' scenario entries)
+            names = string(names); tf = true(size(names));
+            if isempty(patterns), return; end
+            tf = false(size(names));
+            for q = string(patterns(:))'
+                if endsWith(q, "*"), tf = tf | startsWith(names, extractBefore(q, strlength(q)));
+                else, tf = tf | names == q;
+                end
+            end
+        end
+
         function k = secondaryMonitor()
             % A monitor other than the primary one (whose origin is [1 1]), for windows opened by
             % scripts and tests; 1 when there is only one monitor
@@ -123,6 +171,41 @@ classdef MainUI < handle
     end
 
     methods (Static, Access = private)
+        function showOnly(dd, labels, data, allowed, onChange)
+            % Shows the items of dropdown dd whose data the profile lists (allowed; all when
+            % empty). When the selection is hidden, selects the first shown item and calls
+            % onChange with it, as a click would.
+            keep = MainUI.listed(data, allowed);
+            current = string(dd.Value);
+            if isempty(dd.ItemsData)
+                dd.Items = cellstr(data(keep));
+            else
+                dd.Items = cellstr(labels(keep)); dd.ItemsData = cellstr(data(keep));
+            end
+            if any(data(keep) == current)
+                dd.Value = char(current);   % new Items may have moved the selection
+            else
+                first = data(find(keep, 1));
+                dd.Value = char(first);
+                onChange(char(first));
+            end
+        end
+
+        function showValue(dd, value)
+            % Selects value in dd, adding it when the paper profile hides it (a loaded layout or
+            % scenario may use it)
+            value = string(value);
+            if isempty(dd.ItemsData)
+                if ~any(string(dd.Items) == value), dd.Items = [dd.Items, {char(value)}]; end
+            elseif ~any(string(dd.ItemsData) == value)
+                label = value;
+                k = find(SpeedProfile.names == value, 1);   % the speed profile dropdown
+                if ~isempty(k), label = MainUI.profileLabels(k); end
+                dd.Items = [dd.Items, {char(label)}]; dd.ItemsData = [dd.ItemsData, {char(value)}];
+            end
+            dd.Value = char(value);
+        end
+
         function [mainPos, objPos] = windowPositions(monitor)
             % Default spots on the primary monitor, or fitted onto the given monitor: main window
             % at its top left, objective window to the right or below; if neither fits, at the
@@ -176,82 +259,88 @@ classdef MainUI < handle
             xlim(obj.ax,[0 100]); ylim(obj.ax,[0 100]);
 
             % ---- Tools panel ----
+            % Paper profile (Configurations/paperProfiles): shows only what one paper uses
+            place(uilabel(p,'Text','Paper profile:', 'FontWeight','bold'), 1, 1);
+            profiles = paperProfiles();
+            obj.paperProfileDropdown = place(uidropdown(p, ...
+                'Items', cellstr([profiles.Name]), 'Value', 'Full', ...
+                'ValueChangedFcn', @(s,~)obj.setPaperProfile(s.Value)), 1, 2);
             % Ready-made scenarios (Configurations/scenarioCatalog): one click loads the map,
             % targets, edges, walls and agents (of the selected Agent Type)
-            place(uilabel(p,'Text','Scenario:', 'FontWeight','bold'), 1, [1 2]);
+            place(uilabel(p,'Text','Scenario:', 'FontWeight','bold'), 2, [1 2]);
             cat = scenarioCatalog();
             obj.scenarioDropdown = place(uidropdown(p, ...
                 'Items', [{'(build your own)'}, cellstr(cat.Name')], 'Value', '(build your own)', ...
-                'ValueChangedFcn', @(s,~)obj.onScenarioChanged(s.Value)), 2, [1 2]);
+                'ValueChangedFcn', @(s,~)obj.onScenarioChanged(s.Value)), 3, [1 2]);
             place(uibutton(p,'Text','Add Target', ...
-                'ButtonPushedFcn', @(~,~)obj.setMode("addTarget")), 3, 1);
+                'ButtonPushedFcn', @(~,~)obj.setMode("addTarget")), 4, 1);
             place(uibutton(p,'Text','Add Agent', ...
-                'ButtonPushedFcn', @(~,~)obj.setMode("addAgent")), 4, 1);
+                'ButtonPushedFcn', @(~,~)obj.setMode("addAgent")), 5, 1);
             obj.agentTypeDropdown = place(uidropdown(p, ...
                 'Items', obj.registry.keysFor('agenttype'), 'Value', 'Abstract Agent', ...
-                'ValueChangedFcn', @(s,~)obj.onAgentTypeChanged(s.Value)), 4, 2);
+                'ValueChangedFcn', @(s,~)obj.onAgentTypeChanged(s.Value)), 5, 2);
             place(uibutton(p,'Text','Add Edge', ...
-                'ButtonPushedFcn', @(~,~)obj.setMode("addEdge")), 3, 2);
+                'ButtonPushedFcn', @(~,~)obj.setMode("addEdge")), 4, 2);
             place(uibutton(p,'Text','Add Wall', ...
-                'ButtonPushedFcn', @(~,~)obj.setMode("addWall")), 5, 1);
+                'ButtonPushedFcn', @(~,~)obj.setMode("addWall")), 6, 1);
             place(uibutton(p,'Text','Idle', ...
-                'ButtonPushedFcn', @(~,~)obj.setMode("idle")), 5, 2);
+                'ButtonPushedFcn', @(~,~)obj.setMode("idle")), 6, 2);
             place(uibutton(p,'Text','Import Map...', ...
-                'ButtonPushedFcn', @(~,~)obj.controller.importBackground()), 6, 1);
+                'ButtonPushedFcn', @(~,~)obj.controller.importBackground()), 7, 1);
             place(uibutton(p,'Text','Clear All', ...
-                'ButtonPushedFcn', @(~,~)obj.onClearAll()), 6, 2);
+                'ButtonPushedFcn', @(~,~)obj.onClearAll()), 7, 2);
             place(uibutton(p,'Text','Save Layout...', ...
-                'ButtonPushedFcn', @(~,~)obj.onSaveLayout()), 7, 1);
+                'ButtonPushedFcn', @(~,~)obj.onSaveLayout()), 8, 1);
             place(uibutton(p,'Text','Load Layout...', ...
-                'ButtonPushedFcn', @(~,~)obj.onLoadLayout()), 7, 2);
+                'ButtonPushedFcn', @(~,~)obj.onLoadLayout()), 8, 2);
 
             % Charging stations (ChargingStation): click to place one with the power on the right
             place(uibutton(p,'Text','Add Station', ...
-                'ButtonPushedFcn', @(~,~)obj.setMode("addStation")), 8, 1);
+                'ButtonPushedFcn', @(~,~)obj.setMode("addStation")), 9, 1);
             obj.stationPowerField = place(uieditfield(p,'numeric','Value',100,'Limits',[0 Inf], ...
                 'ValueDisplayFormat', '%g W', 'Tooltip', 'Charging power of the stations added next', ...
-                'ValueChangedFcn', @(s,~)obj.onStationPowerChanged(s.Value)), 8, 2);
+                'ValueChangedFcn', @(s,~)obj.onStationPowerChanged(s.Value)), 9, 2);
 
             % Settings of agents added next (agent type above, speed, acceleration, profile)
-            place(uilabel(p,'Text','Agent Speed:'), 9, 1);
-            obj.speedField = place(uieditfield(p,'numeric','Value',15,'Limits',[0.01 Inf]), 9, 2);
-            place(uilabel(p,'Text','Agent Accel:'), 10, 1);
+            place(uilabel(p,'Text','Agent Speed:'), 10, 1);
+            obj.speedField = place(uieditfield(p,'numeric','Value',15,'Limits',[0.01 Inf]), 10, 2);
+            place(uilabel(p,'Text','Agent Accel:'), 11, 1);
             obj.accelField = place(uieditfield(p,'numeric','Value',15,'Limits',[0.01 Inf], ...
-                'ValueChangedFcn', @(s,~)obj.onAgentAccelChanged(s.Value)), 10, 2);
-            place(uilabel(p,'Text','Speed Profile:'), 11, 1);
+                'ValueChangedFcn', @(s,~)obj.onAgentAccelChanged(s.Value)), 11, 2);
+            place(uilabel(p,'Text','Speed Profile:'), 12, 1);
             obj.profileDropdown = place(uidropdown(p, ...
-                'Items', {'Constant', 'SO (smooth)', 'FO (trapezoid)'}, 'ItemsData', cellstr(SpeedProfile.names), ...
-                'Value', 'constant', ...
-                'ValueChangedFcn', @(s,~)obj.onAgentProfileChanged(s.Value)), 11, 2);
+                'Items', cellstr(MainUI.profileLabels), 'ItemsData', cellstr(SpeedProfile.names), ...
+                'Value', 'FO-0', ...
+                'ValueChangedFcn', @(s,~)obj.onAgentProfileChanged(s.Value)), 12, 2);
 
-            place(uilabel(p,'Text','Path Planner:'), 12, 1);
+            place(uilabel(p,'Text','Path Planner:'), 13, 1);
             obj.plannerDropdown = place(uidropdown(p, ...
                 'Items', obj.registry.keysFor('pathplanner'), 'Value', 'Dijkstra Corners', ...
-                'ValueChangedFcn', @(s,~)obj.onPlannerChanged(s.Value)), 12, 2);
+                'ValueChangedFcn', @(s,~)obj.onPlannerChanged(s.Value)), 13, 2);
 
             % Active Policy Selector (full width so long policy names fit)
-            place(uilabel(p,'Text','Active Policy:', 'FontWeight','bold'), 13, [1 2]);
+            place(uilabel(p,'Text','Active Policy:', 'FontWeight','bold'), 14, [1 2]);
             obj.policyDropdown = place(uidropdown(p, ...
                 'Items', obj.registry.keysFor('policy'), ...
                 'Value', 'Random Walk', ...
-                'ValueChangedFcn', @(s,~)obj.onPolicyChanged(s.Value)), 14, [1 2]);
+                'ValueChangedFcn', @(s,~)obj.onPolicyChanged(s.Value)), 15, [1 2]);
 
             % Target type (its dynamics); the uncertainty mode of the default Uncertainty Target:
             % constant A_i by default (as in the paper), spikes are opt-in
-            place(uilabel(p,'Text','Targets:', 'FontWeight','bold'), 15, [1 2]);
+            place(uilabel(p,'Text','Targets:', 'FontWeight','bold'), 16, [1 2]);
             obj.targetTypeDropdown = place(uidropdown(p, ...
                 'Items', obj.registry.keysFor('targettype'), 'Value', 'Uncertainty Target', ...
-                'ValueChangedFcn', @(s,~)obj.onTargetTypeChanged(s.Value)), 16, [1 2]);
+                'ValueChangedFcn', @(s,~)obj.onTargetTypeChanged(s.Value)), 17, [1 2]);
             obj.uncertaintyDropdown = place(uidropdown(p, ...
                 'Items', ScenarioModel.UncertaintyModes, ...
                 'Value', 'Static Uniform', ...
-                'ValueChangedFcn', @(s,~)obj.onUncertaintyModeChanged(s.Value)), 17, [1 2]);
+                'ValueChangedFcn', @(s,~)obj.onUncertaintyModeChanged(s.Value)), 18, [1 2]);
 
             % Objective: the metric plotted over time in the objective window
-            place(uilabel(p,'Text','Objective:', 'FontWeight','bold'), 18, [1 2]);
+            place(uilabel(p,'Text','Objective:', 'FontWeight','bold'), 19, [1 2]);
             obj.objectiveDropdown = place(uidropdown(p, ...
                 'Items', obj.registry.keysFor('metric'), 'Value', 'Average Uncertainty J(t)', ...
-                'ValueChangedFcn', @(s,~)obj.onObjectiveChanged(s.Value)), 19, [1 2]);
+                'ValueChangedFcn', @(s,~)obj.onObjectiveChanged(s.Value)), 20, [1 2]);
 
             obj.modeLabel = place(uilabel(p,'Text','Mode: idle', 'FontWeight','bold'), 21, [1 2]);
             obj.statusLabel = place(uilabel(p,'Text','', 'WordWrap','on', ...
@@ -432,7 +521,7 @@ classdef MainUI < handle
 
         function onAgentProfileChanged(obj, name)
             obj.model.agentSpec.profile = string(name);
-            obj.profileDropdown.Value = char(name);
+            MainUI.showValue(obj.profileDropdown, SpeedProfile.canonical(name));
             obj.setStatus(sprintf('Speed profile: %s (applies to new agents)', name));
         end
 
@@ -447,7 +536,7 @@ classdef MainUI < handle
             state = 'on';
             if running, state = 'off'; end
             dds = {obj.plannerDropdown, obj.policyDropdown, obj.agentTypeDropdown, obj.uncertaintyDropdown, ...
-                obj.profileDropdown, obj.targetTypeDropdown, obj.objectiveDropdown};
+                obj.profileDropdown, obj.targetTypeDropdown, obj.objectiveDropdown, obj.paperProfileDropdown};
             for k = 1:numel(dds)
                 if ~isempty(dds{k}) && isvalid(dds{k}), dds{k}.Enable = state; end
             end

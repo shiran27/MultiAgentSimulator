@@ -6,7 +6,7 @@ classdef EDRHCPolicy < Policy
     % (below) it is the energy-aware variant of S. Welikala and C. G. Cassandras, "Event-driven
     % receding horizon control of energy-aware dynamic agents for distributed persistent
     % monitoring", arXiv 2102.12963 (IEEE CDC 2021), Secs. III-IV and Apps. D-E (registered as
-    % ED-ORHC-SO and ED-ORHC-FO).
+    % ED-ORHC-SO and ED-ORHC-FO-3).
     %
     % Each agent decides for itself, at its events, using only local information: its target
     % i and the 1-hop neighbors of i (their R, A, B, the lengths of the edges (i, j), and
@@ -26,13 +26,15 @@ classdef EDRHCPolicy < Policy
     % simulator; alpha = 0.5 gives the unweighted RHC method of Sec. III.
     %
     % Transit models (property transit):
-    %   "constant speed"  rho_ij = y_ij / maxSpeed, fixed (first-order agents, FO-0), or the
-    %                     agent's shortestTransit if that is longer (a PhysicalAgent's own pace)
+    %   "FO-0"            rho_ij = y_ij / maxSpeed, fixed (first-order agents moving at constant
+    %                     speed), or the agent's shortestTransit if that is longer (a
+    %                     PhysicalAgent's own pace)
     %   "SO"              rho_ij is a decision: the RHCP minimizes energyWeight * E(rho) + J_sH
     %                     with the energy E(rho) of the minimum-energy speed profile, 12 y^2/rho^3
     %                     without limits (Theorem 3)
-    %   "FO"              as "SO" with trapezoid profiles, 27 y^2/(2 rho^3) without limits (the
-    %                     paper's FO-3, Theorem 5)
+    %   "FO-3"            as "SO" with trapezoid profiles, 27 y^2/(2 rho^3) without limits
+    %                     (Theorem 5)
+    % (The older names "constant speed" and "FO" still work; see SpeedProfile.canonical.)
     % speedLimit and accelLimit (Inf by default) bound the energy-aware profiles. E(rho) is then
     % that of the bounded minimum-energy profile (Apps. D-E, generalized to both limits; see
     % SpeedProfile), and rho is no shorter than the limits allow, nor than the agent's
@@ -43,8 +45,8 @@ classdef EDRHCPolicy < Policy
     % including the turns' acceleration v^2 kappa on curved paths.
     % When an agent leaves, the policy hands it the planned transit time rho_ij; the energy-
     % aware models also hand it their profile and limits. A AbstractAgent then follows the
-    % plan exactly (with profile "constant" it is the first-order agent of the Automatica paper;
-    % with profile "SO" under "constant speed" it is the JS simulator's SO#); a
+    % plan exactly (with profile "FO-0" it is the first-order agent of the Automatica paper;
+    % with profile "SO" under transit "FO-0" it is the JS simulator's SO#); a
     % PhysicalAgent tracks it with feedback.
     % All parameters (alpha, transit, limits, energyWeight, H, ...) are properties, set in
     % runTrial with 'Policy_<name>'.
@@ -57,9 +59,9 @@ classdef EDRHCPolicy < Policy
     properties
         alpha = "nominal"    % RHCP3 weight of the next target: "nominal" = 1/|N_i|^2 (N_i
                              % includes i), or a number in [0, 1]; 0.5 = unweighted ED-RHC
-        transit = "constant speed"   % "constant speed", "SO" or "FO" (see above)
-        speedLimit = Inf             % speed limit of the SO / FO profiles
-        accelLimit = Inf             % |acceleration| limit of the SO / FO profiles
+        transit = "FO-0"             % "FO-0", "SO" or "FO-3" (see above)
+        speedLimit = Inf             % speed limit of the SO / FO-3 profiles
+        accelLimit = Inf             % |acceleration| limit of the SO / FO-3 profiles
         energyWeight = 7.68e-3       % weight of the energy objective int u^2 dt (alpha in eqs. 3
                                      % and 20 of the energy-aware paper): its 213.3e-6 for a
                                      % 600 x 600 space, times 36 for our 100 x 100 canvas;
@@ -94,7 +96,7 @@ classdef EDRHCPolicy < Policy
         function obj = EDRHCPolicy(opts)
             arguments
                 opts.Alpha = "nominal"
-                opts.Transit string {mustBeMember(opts.Transit, ["constant speed", "SO", "FO"])} = "constant speed"
+                opts.Transit string = "FO-0"
             end
             obj.alpha = opts.Alpha;
             obj.transit = opts.Transit;
@@ -174,7 +176,7 @@ classdef EDRHCPolicy < Policy
                 [y, pts] = obj.pathLength(model, i, hood(k));
                 rho0 = y / agent.state.maxSpeed;
                 rhoAgent = agent.shortestTransit(pts);   % what the agent can keep (0: any)
-                if obj.transit == "constant speed"
+                if obj.transit == "FO-0"
                     rho0 = max(rho0, rhoAgent);
                     if rho0 > obj.H, continue; end
                     rhoRange = [rho0 rho0];
@@ -184,7 +186,7 @@ classdef EDRHCPolicy < Policy
                 end
                 d = struct('R', R, 'A', A, 'B', B, 'j', k, 'rho', rho0, 'w', weights, ...
                     'y', y, 'vb', obj.speedLimit, 'ub', obj.accelLimit);
-                if obj.transit ~= "constant speed"   % the energy the agent draws, E(rho)
+                if obj.transit ~= "FO-0"   % the energy the agent draws, E(rho)
                     d.E = obj.energyOf(agent, model, i, hood(k), pts, y, rhoRange);
                 end
                 [ac, bc] = obj.planConstraint(agent, model, i, hood(k), d, rhoRange);
@@ -281,7 +283,7 @@ classdef EDRHCPolicy < Policy
             obj.states(agent.index) = struct('stage', "travel", 'target', j, 'covered', [], 'hold', false);
             if isprop(agent, 'transitTime')   % hand the planned transit over to the agent
                 agent.transitTime = rho;
-                if obj.transit == "constant speed"   % the agent's own profile over rho
+                if obj.transit == "FO-0"   % the agent's own profile over rho
                     agent.transitProfile = ""; agent.transitLimits = [Inf Inf];
                 else
                     agent.transitProfile = obj.transit; agent.transitLimits = [obj.speedLimit, obj.accelLimit];
@@ -294,6 +296,16 @@ classdef EDRHCPolicy < Policy
         function forgetAgent(obj, index)
             % Drop the agent's stage: its next plan starts as on arrival (RHCP1)
             if isKey(obj.states, index), remove(obj.states, index); end
+        end
+    end
+
+    methods
+        function set.transit(obj, t)
+            % "FO-0", "SO" or "FO-3"; the older names "constant speed" and "FO" still work
+            t = SpeedProfile.canonical(t);
+            assert(any(t == SpeedProfile.names), 'EDRHCPolicy:Transit', ...
+                'Unknown transit model "%s" (use %s)', t, strjoin(SpeedProfile.names, ", "));
+            obj.transit = t;
         end
     end
 

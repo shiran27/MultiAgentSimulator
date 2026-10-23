@@ -2,7 +2,7 @@ function files = writePaperOutputs(outDir, S)
 % Writes the regenerated results of the simulator paper into outDir:
 %   runs.csv                    every run of every case study (one row per run)
 %   table_validation_rhc.tex    Table II: ED-RHC against the JS simulator
-%   table_validation_energy.tex Table III: ED-ORHC against the JS simulator
+%   table_validation_energy.tex Table III: ED-ORHC (SO and FO-3) against the JS simulator
 %   table_policies.tex          Table IV: policies and agent types
 %   table_planners.tex          Table V: path planners
 %   table_battery.tex           Table VI: battery-aware ED-RHC
@@ -33,9 +33,9 @@ writelines(tabular("|l|c|c|c|c|c|c|", ...
 
 % ---- Table III: ED-ORHC against the JS simulator ----
 cells = [presetName(V.Preset), f2(V.JsJT_SO), f2(V.MatJT_SO), sgn(d(V.MatJT_SO, V.JsJT_SO)), ...
-         f2(V.JsJT_FO), f2(V.MatJT_FO), sgn(d(V.MatJT_FO, V.JsJT_FO))];
+         f2(V.JsJT_FO3), f2(V.MatJT_FO3), sgn(d(V.MatJT_FO3, V.JsJT_FO3))];
 writelines(tabular("|l|c|c|c|c|c|c|", ...
-    ["\multirow{2}{*}{Problem} & \multicolumn{3}{c|}{SO} & \multicolumn{3}{c|}{FO}"; ...
+    ["\multirow{2}{*}{Problem} & \multicolumn{3}{c|}{SO} & \multicolumn{3}{c|}{FO-3}"; ...
      " & JS & Ours & Diff. (\%) & JS & Ours & Diff. (\%)"], cells), files(3));
 
 % ---- Table IV: policies and agent types ----
@@ -67,7 +67,7 @@ writelines(tabular("|l|l|c|c|c|c|", ["Policy", "Agents", "$J(T)$", stack("Lowest
 % ---- Macros quoted in the text ----
 T = paperTables("tradeoff", S.tradeoff);
 allRHC = [d(V.MatRHC_05, V.JsRHC_05); d(V.MatRHC_nominal, V.JsRHC_nominal)];
-allEn = [d(V.MatJT_SO, V.JsJT_SO); d(V.MatJT_FO, V.JsJT_FO)];
+allEn = [d(V.MatJT_SO, V.JsJT_SO); d(V.MatJT_FO3, V.JsJT_FO3)];
 pick = @(tab, label, col) tab.(col)(tab.Condition == label);
 mac = [
     macro("prValRHCMin", sprintf('%+.2f', min(allRHC)))
@@ -83,7 +83,7 @@ mac = [
     macro("prJEDPhys", sprintf('%.1f', pick(P, "ED-RHC / Physical", 'J')))
     macro("prJSOAbs", sprintf('%.1f', pick(P, "ED-ORHC-SO / Abstract", 'J')))
     macro("prJSOPhys", sprintf('%.1f', pick(P, "ED-ORHC-SO / Physical", 'J')))
-    macro("prJFOPhys", sprintf('%.1f', pick(P, "ED-ORHC-FO / Physical", 'J')))
+    macro("prJFOThreePhys", sprintf('%.1f', pick(P, "ED-ORHC-FO-3 / Physical", 'J')))
     macro("prPolicyReduction", sprintf('%.1f', 100 * (1 - pick(P, "ED-RHC / Physical", 'J') / pick(P, "Random Walk / Physical", 'J'))))
     macro("prPhysicalIncrease", sprintf('%.1f', 100 * (pick(P, "ED-RHC / Physical", 'J') / pick(P, "ED-RHC / Abstract", 'J') - 1)))
     macro("prPlannerLengthDJ", sprintf('%.1f', Q.Length(1)))

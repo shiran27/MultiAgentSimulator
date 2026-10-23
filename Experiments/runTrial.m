@@ -26,6 +26,7 @@ if ~isfile(layoutFile), layoutFile = fullfile(root, 'Configurations', layoutFile
 tmp = load(layoutFile, 's');
 if isfield(p, 'TargetType'), tmp.s.targetType = string(p.TargetType); end
 reg = ComponentRegistry();
+p.Policy = string(reg.resolve(char(p.Policy)));   % older names (e.g. 'ED-ORHC-FO') still work
 plannerFactory = reg.factoryFor('pathplanner', char(p.Planner));
 model = ScenarioModel(plannerFactory(), reg.factoryFor('agenttype', char(p.AgentType)));
 model.importLayout(tmp.s);
@@ -119,7 +120,9 @@ model.setUncertaintyMode(char(p.UncertaintyMode));
 fit = model.checkAgentFit();
 if fit ~= "", warning('runTrial:AgentPolicyFit', '%s', fit); end
 model.resetSimulationState();  % also clears RHC reservation tables from earlier trials
-if p.Seed >= 0, rng(p.Seed); end   % -1 (the default) keeps the caller's rng state
+% -1 (the default) keeps the caller's rng state. The generator is named because parfor workers
+% default to another one, so a seeded run gives the same result in serial and in parallel
+if p.Seed >= 0, rng(p.Seed, 'twister'); end
 
 % ---- Simulate (same stepping as SimulationController.runToEnd) ----
 clock = SimulationClock(p.EndTime, p.Dt);
@@ -156,7 +159,7 @@ out = struct('finalJ', finalJ, 'steadyJ', steadyJ, 'slopeJ', slopeJ, ...
 out.metricValues = model.metricValues(clock.currentTime);
 out.collisions = sum(model.collisions);   % steps in which an agent's motion crossed a wall
 % Energy-aware RHC metrics (paper eqs. 3 and 73): Je = sum of int |u|^2 dt (NaN when an agent
-% used a "constant" profile), peak speed and acceleration; Js = finalJ; JT = energyWeight * Je + Js.
+% used an FO-0 profile), peak speed and acceleration; Js = finalJ; JT = energyWeight * Je + Js.
 out.Je = NaN; out.JT = NaN; out.vmax = NaN; out.umax = NaN;
 if ~isempty(model.agents) && all(arrayfun(@(a) isprop(a, 'Je'), model.agents))
     out.Je = sum([model.agents.Je]);

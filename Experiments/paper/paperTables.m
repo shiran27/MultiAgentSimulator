@@ -61,8 +61,9 @@ T.Beta = arrayfun(@(c) c.Params.EnergyBeta, R.Conditions)';
 end
 
 function T = validationTable(Ted, Teo)
-% One row per JS preset: ED-RHC (alpha 0.5 and nominal) and ED-ORHC (SO and FO) J values of the
-% JS simulator and of this simulator, with the difference in percent
+% One row per JS preset: ED-RHC (alpha 0.5 and nominal) and ED-ORHC (SO and FO-3) J values of
+% the JS simulator and of this simulator, with the difference in percent (columns JsJT_SO,
+% JsJT_FO3, ...)
 Ted.Preset = erase(string(Ted.Preset), "JS_"); Ted.Alpha = string(Ted.Alpha);
 presets = unique(Ted.Preset, 'stable');
 T = table(presets, 'VariableNames', {'Preset'});
@@ -77,12 +78,13 @@ end
 if nargin > 1 && ~isempty(Teo)
     Teo.Preset = erase(string(Teo.Preset), "JS_"); Teo.Method = string(Teo.Method);
     for m = unique(Teo.Method, 'stable')'
-        T.("JsJT_" + m) = nan(height(T), 1); T.("MatJT_" + m) = nan(height(T), 1);
+        tag = erase(m, "-");                                % "SO", "FO3"
+        T.("JsJT_" + tag) = nan(height(T), 1); T.("MatJT_" + tag) = nan(height(T), 1);
         for p = 1:numel(presets)
             k = Teo.Preset == presets(p) & Teo.Method == m;
             if any(k)
-                T.("JsJT_" + m)(p) = Teo.JsJT(k);
-                T.("MatJT_" + m)(p) = Teo.MatlabJT(k);
+                T.("JsJT_" + tag)(p) = Teo.JsJT(k);
+                T.("MatJT_" + tag)(p) = Teo.MatlabJT(k);
             end
         end
     end
