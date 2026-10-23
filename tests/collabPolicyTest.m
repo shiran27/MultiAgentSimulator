@@ -20,7 +20,8 @@ end
 
 function testSharingWhereNeeded(tc)
 p = base("JS_2Agent_5T", 80);
-p.TargetA = [1 1 12 1 1];                       % target 3 needs two agents (B = 10)
+p.Layout = fullfile("Collab", "Collab_2Agent_5T_Group.mat");   % A_3 = 12: needs two agents (B = 10)
+p.TargetRates = "layout";
 p.Policy = "ED-RHC"; p.Policy_alpha = 0.5;
 ed = runTrial(p);
 p.Policy = "Collab-ED-RHC"; p = rmfield(p, 'Policy_alpha');

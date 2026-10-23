@@ -538,11 +538,14 @@ classdef CollabEDRHCPolicy < Policy
                     X = X(sum(X, 2) <= span + obj.tol, :);
                 end
             else
-                rng(1);   % deterministic samples (P1: identical solutions for identical data)
+                % deterministic samples (P1: identical solutions for identical data) from an own
+                % stream: the same on parallel workers, whose default generator differs, and the
+                % caller's rng state is left as is
+                s = RandStream('mt19937ar', 'Seed', 1);
                 n = obj.groupSamples;
-                a = rand(n, 1) * span; b = rand(n, 1) .* (span - a);
+                a = rand(s, n, 1) * span; b = rand(s, n, 1) .* (span - a);
                 if tmpl.fixLeader, a(:) = 0; end
-                F = rand(n, nS - 1);
+                F = rand(s, n, nS - 1);
                 F(1:min(n, 10), :) = 1;                       % the others stay
                 F(11:min(n, 20), :) = 0;                      % the others leave now
                 F(21:min(n, 30), :) = a(21:min(n, 30)) ./ max(a(21:min(n, 30)) + b(21:min(n, 30)) + r1, obj.tol);

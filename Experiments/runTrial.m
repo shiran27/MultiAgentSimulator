@@ -33,21 +33,18 @@ if isfield(p, 'Metrics') && ~isempty(p.Metrics), model.setMetrics(p.Metrics); en
 model.detectionRadius = p.DetectionRadius;
 stored = arrayfun(@(a) a.initialTargetIdx, model.agents);   % start targets saved in the layout
 model.agents = [];   % trial parameters place the agents ("layout" reuses the stored starts)
+% TargetRates: "params" (default) gives every target A_base and B; "layout" keeps the layout file's
+% per-target A, B and R(0) (e.g. targets that only a group of agents can clear, A_i > B_i)
+layoutRates = [arrayfun(@(t) t.A_uniformBase, model.targets); [model.targets.B]; [model.targets.initialR]];
 for t = model.targets
     t.configure(p);
 end
-% TargetA / TargetB (optional): per-target growth and sensing rates (vectors over the targets),
-% e.g. targets that only a group of agents can clear (A_i >= B_i)
-for name = ["TargetA", "TargetB"]
-    if isfield(p, name)
-        v = p.(name);
-        assert(numel(v) == numel(model.targets), '%s needs one value per target', name);
-        for k = 1:numel(model.targets)
-            if name == "TargetA", model.targets(k).setRates(v(k), [], []);
-            else, model.targets(k).setRates([], v(k), []);
-            end
-        end
+if string(p.TargetRates) == "layout"
+    for k = 1:numel(model.targets)
+        model.targets(k).setRates(layoutRates(1, k), layoutRates(2, k), layoutRates(3, k));
     end
+else
+    assert(string(p.TargetRates) == "params", 'runTrial:TargetRates', 'TargetRates must be "params" or "layout"');
 end
 
 starts = parseStarts(p.AgentStarts, stored);

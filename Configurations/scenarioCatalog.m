@@ -21,6 +21,13 @@ rows = {
     "JS: 3 agents, maze",      "Legacy/JS_3Agent_Maze.mat",    "Preset of the legacy JS simulator (RHC papers), scaled to the canvas."
     "JS: 3 agents, general",   "Legacy/JS_3Agent_General.mat", "Preset of the legacy JS simulator (RHC papers), scaled to the canvas."
     "JS: 3 agents, room",      "Legacy/JS_3Agent_Room.mat",    "Preset of the legacy JS simulator (RHC papers), scaled to the canvas."
+    "Collab: 2 agents, 5 targets, group target", "Collab/Collab_2Agent_5T_Group.mat", "JS 2 agents, 5 targets with A = 12 > B = 10 at target 3, which only two agents can clear (collaboration paper; Collab-ED-RHC, T = 500 s, dt = 0.02 s)."
+    "Collab: 3 agents, general, group targets", "Collab/Collab_3Agent_General_Group.mat", "JS 3 agents, general with A = 12 > B = 10 at targets 3 and 8 (collaboration paper; Collab-ED-RHC, T = 500 s, dt = 0.02 s)."
+    "Collab: general, 2 agents", "Collab/Collab_General_N2.mat", "JS general layout with 2 agents spread over the targets (collaboration paper's team-size study)."
+    "Collab: general, 3 agents", "Collab/Collab_General_N3.mat", "JS general layout with 3 agents spread over the targets (collaboration paper's team-size study)."
+    "Collab: general, 4 agents", "Collab/Collab_General_N4.mat", "JS general layout with 4 agents spread over the targets (collaboration paper's team-size study)."
+    "Collab: general, 5 agents", "Collab/Collab_General_N5.mat", "JS general layout with 5 agents spread over the targets (collaboration paper's team-size study)."
+    "Collab: general, 6 agents", "Collab/Collab_General_N6.mat", "JS general layout with 6 agents spread over the targets (collaboration paper's team-size study)."
     };
 T = table([rows{:, 1}]', fullfile(here, [rows{:, 2}]'), [rows{:, 3}]', ...
     'VariableNames', {'Name', 'File', 'Description'});

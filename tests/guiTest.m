@@ -174,7 +174,9 @@ classdef guiTest < matlab.uitest.TestCase
                 m = tc.ui.model;
                 tc.verifyEqual(numel(m.targets), size(tmp.s.targets, 1), name + ": targets");
                 tc.verifyEqual(numel(m.agents), numel(tmp.s.agentStarts), name + ": agents");
-                tc.verifyTrue(isgraphics(tc.ui.renderer.bgImageHandle), name + ": background shown");
+                if isfield(tmp.s, 'background') && strlength(string(tmp.s.background)) > 0
+                    tc.verifyTrue(isgraphics(tc.ui.renderer.bgImageHandle), name + ": background shown");
+                end
                 tc.type(tc.ui.endTimeField, 3);
                 tc.press(button(tc, 'Run to End'));
                 tc.verifyTrue(isfinite(m.cumUncertaintyIntegral), name + ": runs");

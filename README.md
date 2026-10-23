@@ -288,7 +288,14 @@ A slower station does not empty the batteries, since the reserve covers the wors
 - **Solver.** The next targets of the group are enumerated. For each assignment, the departure times and `tf` are searched on a dense grid (or sampled for a group of 2 or more), refined by coordinate-wise line searches, and polished with `fmincon`. The shifts of mode B are optimized from the no-shift plan with the IR constraints, and adopted only if they lower the objective.
 - **Parameters.** `coordination`, `terminal`, `deltaRule`, `sharing` (false: no sharing, covered next targets excluded), `H` (250), `gridSize`, `traceDecisions` (`decisions`: one row per solve). `stats` counts solves, events by kind, solve CPU time and shifts.
 
-`tests/collabPolicyTest.m` checks the reduction to ED-RHC with one agent, sharing on a target only two agents can clear, and the event counts; `tests/collabCostTest.m` checks the recursion and the terminal correction against a fine time integration. `Experiments/collab/collabExperiments.m` runs the paper's experiments (the eight JS presets, two scenarios with `A_i > B_i`, and two to six agents on the General preset) and writes the tables and figures to `results/collab/`.
+`tests/collabPolicyTest.m` checks the reduction to ED-RHC with one agent, sharing on a target only two agents can clear, and the event counts; `tests/collabCostTest.m` checks the recursion and the terminal correction against a fine time integration.
+
+**Collaboration paper results.** `CollabResults.mlx` (repository root; built from `Experiments/collab/collabResultsSource.m` by `buildCollabResults`) regenerates every figure and result of the collaboration paper: the target-class, neighborhood and setup figures (`collabFigures`), the 79 simulations (`collabExperiments`: the eight JS presets with four methods and three ablations, two configurations with targets that only two agents can clear, and two to six agents on the General preset), the tables, plots and the numbers quoted in the text (`collab_macros.tex`). Saved runs (`results/collab/runs/`) are not run again; the runs use parallel workers when the Parallel Computing Toolbox is available (about 30 minutes on a 10-core computer) and give the same results serially. Run it in the Live Editor, or headless:
+
+    matlab -batch "addpath(genpath(pwd)); exportCollabResults"              % report: results/collab/CollabResults.pdf
+    matlab -batch "addpath(genpath(pwd)); exportCollabResults(Quick=true)"  % 60 s runs, a few minutes
+
+Every setup is a layout file the GUI lists in its Scenario dropdown: the JS presets (`JS: ...`) and the collaboration setups (`Collab: ...`, `Configurations/Collab/`, built by `Configurations/makeCollabLayouts.m`). The collaboration layouts store per-target `A`, `B` and `R0`; `runTrial` uses them with `'TargetRates', "layout"`. The paper's runs use Collab-ED-RHC with its defaults (mode B, `terminal = "hhat"`, `H = 250`), T = 500 s and dt = 0.02 s; select **Collab-ED-RHC** in the Agent Policy dropdown to run them in the GUI.
 
 ## Headless experiments
 
@@ -303,7 +310,7 @@ out = runTrial(struct('Layout', "ReportLayout.mat", 'AgentStarts', "layout", ...
 - `AgentStarts`: `"auto"` (spread evenly), `"layout"` (the start targets stored in the layout file), or target indices such as `[1 5]`.
 - `Seed`: the `rng` seed set before simulating (`-1`, the default, leaves `rng` as it is).
 - `Policy_<property>`: sets a property of the active policy, e.g. `'Policy_dwellScale', 0` turns off the Random Walk dwell and `'Policy_alpha', 0.5` sets ED-RHC's alpha.
-- `TargetA`, `TargetB`: per-target growth and sensing rates (one value per target), e.g. targets that only a group of agents can clear (`A_i > B_i`). Without them every target takes `A_base` and `B`.
+- `TargetRates`: `"params"` (default) gives every target `A_base` and `B`; `"layout"` keeps the layout file's per-target `A`, `B` and `R0`, e.g. the `Configurations/Collab/` setups with targets that only a group of agents can clear (`A_i > B_i`).
 - `Log = true`: `out.log` holds the per-step time, `J(t)`, agent positions, velocities, accelerations, headings, SOC, battery energy and `J_e`; `out.metrics` holds per-agent path length `L`, heading change `Θ`, integrated squared acceleration `E_a`, final SOC and energy (`Experiments/metrics/`).
 
 `Experiments/runSweep(grid)` runs every combination of parameter values, and `analyzeResults` compares the variants.
